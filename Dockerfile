@@ -13,7 +13,7 @@ RUN pip install uv
 
 COPY pyproject.toml README.md ./
 # Install deps into an isolated prefix so we can copy only what's needed.
-RUN uv pip install --system --no-dev .
+RUN uv pip install --system .
 
 
 # ─── Stage 2: Runtime ─────────────────────────────────────────────────────────
