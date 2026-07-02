@@ -32,7 +32,7 @@ jobs:
         run: mypy app
 
       - name: Test with coverage
-        run: pytest -q --cov=app --cov-report=term-missing --cov-fail-under=80
+        run: pytest -q --cov=app --cov-report=term-missing --cov-fail-under=80 --cov-config=.coveragerc
 
   docker:
     name: Docker Build
