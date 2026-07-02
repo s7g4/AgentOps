@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import inspect
-
 from app.providers.base import (
     AnyClassificationProvider,
     AsyncClassificationProvider,
     ClassificationProvider,
 )
 from app.schemas.classification import Classification
-
 
 
 class DeterministicClassifierProvider(ClassificationProvider):
@@ -38,6 +35,7 @@ class ClassifierAgent:
         )
 
     async def classify(self, message: str) -> Classification:
-        if inspect.iscoroutinefunction(self.provider.classify):
-            return await self.provider.classify(message)  # type: ignore[return-value]
-        return self.provider.classify(message)  # type: ignore[return-value]
+        if isinstance(self.provider, AsyncClassificationProvider):
+            return await self.provider.classify(message)
+
+        return self.provider.classify(message)

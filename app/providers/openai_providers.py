@@ -31,10 +31,14 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any, cast
 
-from openai import AsyncOpenAI, APIStatusError, AuthenticationError, RateLimitError as OpenAIRateLimitError
+from openai import APIStatusError, AsyncOpenAI, AuthenticationError
+from openai import RateLimitError as OpenAIRateLimitError
+from openai.types.chat import ChatCompletionToolParam
 
 from app.exceptions import (
+    AgentOpsError,
     ClassificationError,
     ConfigurationError,
     PlanningError,
@@ -88,9 +92,8 @@ def _make_client(api_key: str | None) -> AsyncOpenAI:
     return AsyncOpenAI(api_key=api_key)
 
 
-def _map_openai_error(exc: Exception, context: str) -> AgentOpsError:  # type: ignore[name-defined]
+def _map_openai_error(exc: Exception, context: str) -> AgentOpsError:
     """Map OpenAI SDK errors to AgentOps typed exceptions."""
-    from app.exceptions import AgentOpsError  # noqa: PLC0415
     if isinstance(exc, AuthenticationError):
         return ConfigurationError(f"OpenAI auth failed during {context}: {exc}")
     if isinstance(exc, OpenAIRateLimitError):
@@ -143,7 +146,7 @@ class OpenAIPlanningProvider(AsyncPlanningProvider):
     def __init__(
         self,
         api_key: str | None,
-        tool_schemas: list[dict[str, object]],
+        tool_schemas: list[dict[str, Any]],
         model: str = "gpt-4o-mini",
     ) -> None:
         self._client = _make_client(api_key)
@@ -159,10 +162,11 @@ class OpenAIPlanningProvider(AsyncPlanningProvider):
             "Select the appropriate tools to answer the customer. "
             "Only call tools that are directly relevant."
         )
+        tools_cast = [cast(ChatCompletionToolParam, t) for t in self._tool_schemas]
         try:
             resp = await self._client.chat.completions.create(
                 model=self._model,
-                tools=self._tool_schemas,  # type: ignore[arg-type]
+                tools=tools_cast,
                 tool_choice="auto",
                 messages=[
                     {"role": "system", "content": system},
@@ -177,13 +181,16 @@ class OpenAIPlanningProvider(AsyncPlanningProvider):
         msg = resp.choices[0].message
         if msg.tool_calls:
             for tc in msg.tool_calls:
+                function = getattr(tc, "function", None)
+                if function is None:
+                    continue
                 try:
-                    raw_input = json.loads(tc.function.arguments)
+                    raw_input = json.loads(function.arguments)
                 except json.JSONDecodeError as exc:
                     raise PlanningError(
-                        f"Tool call arguments are not valid JSON: {tc.function.arguments!r}"
+                        f"Tool call arguments are not valid JSON: {function.arguments!r}"
                     ) from exc
-                tool_calls.append({"tool_name": tc.function.name, "input": raw_input})
+                tool_calls.append({"tool_name": function.name, "input": raw_input})
 
         return ToolPlan(tool_calls=tool_calls)
 

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-import inspect
-
-from app.providers.base import AnyPlanningProvider, PlanningProvider
+from app.providers.base import (
+    AnyPlanningProvider,
+    AsyncPlanningProvider,
+    PlanningProvider,
+)
 from app.schemas.plan import ToolPlan
 
 
@@ -33,6 +35,7 @@ class PlannerAgent:
         self.provider: AnyPlanningProvider = provider or DeterministicPlanningProvider()
 
     async def plan(self, intent: str, message: str) -> ToolPlan:
-        if inspect.iscoroutinefunction(self.provider.plan):
-            return await self.provider.plan(intent, message)  # type: ignore[return-value]
-        return self.provider.plan(intent, message)  # type: ignore[return-value]
+        if isinstance(self.provider, AsyncPlanningProvider):
+            return await self.provider.plan(intent, message)
+
+        return self.provider.plan(intent, message)

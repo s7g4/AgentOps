@@ -29,7 +29,8 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -59,13 +60,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)  # type: ignore[arg-type]
         self.config = config or RateLimitConfig()
 
-    async def dispatch(self, request: Request, call_next: object) -> Response:
-        from collections.abc import Callable  # noqa: PLC0415
-
-        call_next_fn: Callable[..., object] = call_next  # type: ignore[assignment]
-
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         if request.url.path in _EXEMPT_PATHS:
-            return await call_next_fn(request)  # type: ignore[return-value]
+            return await call_next(request)
 
         key = self._get_key(request)
         allowed = await self._is_allowed(key)
@@ -83,7 +82,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 headers={"Retry-After": str(self.config.window_seconds)},
             )
 
-        return await call_next_fn(request)  # type: ignore[return-value]
+        return await call_next(request)
 
     def _get_key(self, request: Request) -> str:
         # Respect X-Forwarded-For if behind a proxy.

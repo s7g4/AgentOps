@@ -31,7 +31,7 @@ async def list_traces(
     """
     store: TraceStore = request.app.state.trace_store
     limit = min(limit, 200)
-    traces = await store.list(limit=limit, offset=offset)
+    traces = await store.list_traces(limit=limit, offset=offset)
     total = await store.count()
     return JSONResponse(
         content={

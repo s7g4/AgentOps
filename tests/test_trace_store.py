@@ -1,9 +1,7 @@
 """Tests for TraceStore: async, thread-safety, pagination, eviction cap."""
 from __future__ import annotations
 
-import threading
-
-from app.runtime.trace_store import TraceStore, _MAX_TRACES
+from app.runtime.trace_store import _MAX_TRACES, TraceStore
 from app.schemas.trace import Trace
 
 
@@ -41,34 +39,34 @@ class TestTraceStorePutGet:
 class TestTraceStoreList:
     async def test_list_empty(self) -> None:
         store = TraceStore()
-        assert await store.list() == []
+        assert await store.list_traces() == []
 
     async def test_list_returns_traces(self) -> None:
         store = TraceStore()
         for tid in ["x1", "x2", "x3"]:
             await store.put(_make_trace(tid))
-        result = await store.list(limit=10)
+        result = await store.list_traces(limit=10)
         assert len(result) == 3
 
     async def test_list_limit(self) -> None:
         store = TraceStore()
         for i in range(10):
             await store.put(_make_trace(str(i)))
-        result = await store.list(limit=3)
+        result = await store.list_traces(limit=3)
         assert len(result) == 3
 
     async def test_list_offset(self) -> None:
         store = TraceStore()
         for i in range(5):
             await store.put(_make_trace(str(i)))
-        result = await store.list(limit=100, offset=3)
+        result = await store.list_traces(limit=100, offset=3)
         assert len(result) == 2
 
     async def test_list_most_recent_first(self) -> None:
         store = TraceStore()
         await store.put(_make_trace("first"))
         await store.put(_make_trace("second"))
-        result = await store.list()
+        result = await store.list_traces()
         assert result[0].trace_id == "second"
         assert result[1].trace_id == "first"
 

@@ -29,8 +29,12 @@ from app.agents.planner.planner_agent import PlannerAgent
 from app.agents.response_generator.response_generator_agent import ResponseGeneratorAgent
 from app.agents.verifier.verifier_agent import VerifierAgent
 from app.config.settings import load_settings
-from app.exceptions import ToolError
-from app.logging.structured_logger import bind_trace_id, configure_structlog, get_logger, reset_trace_id
+from app.logging.structured_logger import (
+    bind_trace_id,
+    configure_structlog,
+    get_logger,
+    reset_trace_id,
+)
 from app.registry.tool_registry import ToolRegistry
 from app.runtime.metrics import (
     REQUEST_COUNT,
@@ -211,8 +215,7 @@ class AgentOpsRuntime:
                             "tool_execution",
                             {"tool_name": tool_name, "status": "error", "error": str(result)},
                         )
-                        # Re-raise first tool error to trigger FAILED path.
-                        raise result  # type: ignore[misc]
+                        raise result
                     else:
                         tool_outputs.append(result)
                         trace.tool_calls.append(

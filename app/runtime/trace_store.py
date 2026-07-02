@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import asyncio
 import json
-from dataclasses import dataclass, field
 from threading import RLock
 from typing import Protocol, runtime_checkable
 
@@ -18,7 +16,7 @@ class TraceStoreProtocol(Protocol):
 
     async def put(self, trace: Trace) -> None: ...
     async def get(self, trace_id: str) -> Trace | None: ...
-    async def list(self, limit: int, offset: int) -> list[Trace]: ...
+    async def list_traces(self, limit: int, offset: int) -> list[Trace]: ...
     async def count(self) -> int: ...
 
 
@@ -50,7 +48,7 @@ class TraceStore:
         with self._lock:
             return self._traces.get(trace_id)
 
-    async def list(self, limit: int = 100, offset: int = 0) -> list[Trace]:
+    async def list_traces(self, limit: int = 100, offset: int = 0) -> list[Trace]:
         """Return a paginated slice of traces, most recent first."""
         with self._lock:
             all_traces = list(reversed(list(self._traces.values())))
@@ -132,7 +130,7 @@ class RedisTraceStore:
             return None
         return Trace.from_dict(json.loads(raw))
 
-    async def list(self, limit: int = 100, offset: int = 0) -> list[Trace]:
+    async def list_traces(self, limit: int = 100, offset: int = 0) -> list[Trace]:
         """Return traces ordered by insertion time, most recent first."""
         # ZREVRANGEBYSCORE for newest-first ordering.
         ids: list[str] = await self._redis.zrevrange(
@@ -158,4 +156,4 @@ class RedisTraceStore:
             return False
 
     async def close(self) -> None:
-        await self._redis.aclose()
+        await self._redis.close()

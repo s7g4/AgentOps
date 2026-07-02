@@ -22,7 +22,6 @@ from app.schemas.classification import Classification
 from app.schemas.plan import ToolPlan
 from app.schemas.verification import VerificationResult
 
-
 # ── Synchronous ABCs ───────────────────────────────────────────────────────────
 
 class ClassificationProvider(ABC):

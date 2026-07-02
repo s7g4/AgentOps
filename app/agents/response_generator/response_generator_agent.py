@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-import inspect
-
-from app.providers.base import AnyResponseProvider, ResponseProvider
+from app.providers.base import (
+    AnyResponseProvider,
+    AsyncResponseProvider,
+    ResponseProvider,
+)
 
 
 class DeterministicResponseProvider(ResponseProvider):
@@ -33,8 +35,7 @@ class ResponseGeneratorAgent:
     async def generate(
         self, intent: str, tool_outputs: list[dict[str, object]], original_message: str
     ) -> str:
-        if inspect.iscoroutinefunction(self.provider.generate):
-            return await self.provider.generate(  # type: ignore[return-value]
-                intent, tool_outputs, original_message
-            )
-        return self.provider.generate(intent, tool_outputs, original_message)  # type: ignore[return-value]
+        if isinstance(self.provider, AsyncResponseProvider):
+            return await self.provider.generate(intent, tool_outputs, original_message)
+
+        return self.provider.generate(intent, tool_outputs, original_message)

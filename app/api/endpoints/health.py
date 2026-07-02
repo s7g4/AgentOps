@@ -48,7 +48,7 @@ async def health() -> JSONResponse:
 
             r = aioredis.from_url(settings.redis_url, socket_connect_timeout=2)
             await r.ping()
-            await r.aclose()
+            await r.close()
             checks["redis"] = "ok"
         except Exception:  # noqa: BLE001
             checks["redis"] = "error"

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import contextvars
 import logging
-from typing import Any, MutableMapping
+from collections.abc import MutableMapping
+from typing import Any
 
 import structlog
 

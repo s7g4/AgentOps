@@ -22,6 +22,7 @@ Why middleware over FastAPI Depends?
 from __future__ import annotations
 
 import hmac
+from collections.abc import Awaitable, Callable
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -37,17 +38,16 @@ _OPEN_PATHS: frozenset[str] = frozenset({"/health", "/metrics", "/docs", "/opena
 class APIKeyMiddleware(BaseHTTPMiddleware):
     """Validate ``X-Api-Key`` header on every request (when auth is enabled)."""
 
-    async def dispatch(self, request: Request, call_next: object) -> Response:
-        from collections.abc import Callable  # noqa: PLC0415
-
-        call_next_fn: Callable[..., object] = call_next  # type: ignore[assignment]
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         settings = load_settings()
 
         if not settings.auth_enabled:
-            return await call_next_fn(request)  # type: ignore[return-value]
+            return await call_next(request)
 
         if request.url.path in _OPEN_PATHS:
-            return await call_next_fn(request)  # type: ignore[return-value]
+            return await call_next(request)
 
         if not settings.api_key:
             raise ConfigurationError(
@@ -65,4 +65,4 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
                 content={"error": "Unauthorized", "detail": "Invalid or missing API key"},
             )
 
-        return await call_next_fn(request)  # type: ignore[return-value]
+        return await call_next(request)
