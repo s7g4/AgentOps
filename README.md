@@ -1,14 +1,14 @@
 # AgentOps
 
-A reference-quality, production-grade orchestrator demonstrating structured task routing, concurrent tool execution, observability, and evaluation.
+Production-grade AI customer operations platform. Structured task routing through a finite state machine runtime — classify, plan, execute tools, verify, respond.
 
-[![CI](https://github.com/your-org/agentops/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/agentops/actions/workflows/ci.yml)
+[![CI](https://github.com/s7g4/AgentOps/actions/workflows/ci.yml/badge.svg)](https://github.com/s7g4/AgentOps/actions/workflows/ci.yml)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
-## Core System Architecture
+## Architecture
 
 ```mermaid
 graph TD
@@ -16,21 +16,21 @@ graph TD
     Client -->|GET /trace/id| API
     Client -->|GET /metrics| API
 
-    subgraph API_Layer [API Transport]
+    subgraph Transport [API Transport]
         RateLimit[RateLimitMiddleware] --> Auth[APIKeyMiddleware]
         Auth --> API
     end
 
     API -->|invoke| Runtime[AgentOpsRuntime]
 
-    subgraph Runtime_FSM [Orchestrator FSM Engine]
-        Runtime --> State[RuntimeState FSM]
+    subgraph FSM [Orchestrator FSM]
+        Runtime --> State[RuntimeState]
         State --> Runtime
     end
 
     Runtime -->|1. Classify| Classifier[ClassifierAgent]
     Runtime -->|2. Plan| Planner[PlannerAgent]
-    Runtime -->|3. Parallel Exec| Executor[Tool Execution Wrapper]
+    Runtime -->|3. Execute| Executor[ToolExecutor]
     Runtime -->|4. Verify| Verifier[VerifierAgent]
     Runtime -->|5. Respond| Responder[ResponseGeneratorAgent]
 
@@ -41,44 +41,30 @@ graph TD
         Responder -->|ABC| RespProvider[ResponseProvider]
     end
 
-    subgraph Tools [Tool Registry Layer]
-        Executor -->|lookup| Registry[ToolRegistry]
-        Registry -->|validate and execute| CoreTools[Core Tools]
+    subgraph Tools [Tool Registry]
+        Executor --> Registry[ToolRegistry]
+        Registry --> CoreTools[BaseTool implementations]
     end
 
-    Runtime -->|Write timeline and outcomes| Store[TraceStore / RedisTraceStore]
-    Runtime -->|Observe latencies and state changes| Prometheus[Prometheus Client Metrics]
+    Runtime --> Store[TraceStore / RedisTraceStore]
+    Runtime --> Prometheus[Prometheus Metrics]
 ```
-
-See [docs/architecture.md](docs/architecture.md) for full component details.
 
 ---
 
 ## Quickstart
 
-### Prerequisites
-- Python 3.12+
-- Docker (optional)
-
-### Local Development
+**Requirements**: Python 3.12+, Docker (optional)
 
 ```bash
-# Clone
-git clone https://github.com/your-org/agentops.git
-cd agentops
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies and package
-pip install -e .
-
-# Run application
+git clone https://github.com/s7g4/AgentOps.git
+cd AgentOps
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
 python -m app.main
 ```
 
-The API is available at `http://localhost:8000`.
+API available at `http://localhost:8000`.
 
 ### Docker
 
@@ -86,7 +72,9 @@ The API is available at `http://localhost:8000`.
 docker compose up
 ```
 
-### Environment Configuration
+---
+
+## Configuration
 
 | Variable | Default | Description |
 |---|---|---|
@@ -101,67 +89,84 @@ docker compose up
 
 ---
 
-## API Reference
+## API
 
 ### `POST /messages`
-Processes a message payload through the orchestrated pipeline.
 
-**Request**
 ```json
-{
-  "source": "ticket",
-  "customer_id": "cust_123",
-  "message": "I want a refund for my order"
-}
-```
+// Request
+{ "source": "ticket", "customer_id": "cust_123", "message": "I want a refund" }
 
-**Response**
-```json
-{
-  "trace_id": "550e8400-...",
-  "intent": "refund",
-  "confidence": 0.8,
-  "escalated": false,
-  "response": "Refund policy: Refunds accepted within 30 days..."
-}
+// Response
+{ "trace_id": "550e8400-...", "intent": "refund", "confidence": 0.8, "escalated": false, "response": "..." }
 ```
 
 ### `POST /messages/batch`
-Executes concurrent batch validation for multiple ticket entries.
+Concurrent batch processing of multiple message payloads.
 
 ### `GET /trace/{trace_id}`
-Retrieves a detailed transaction timeline, including step execution sequences and internal decisions.
+Full execution timeline — state transitions, tool calls, agent decisions.
+
+### `GET /trace/`
+Paginated trace listing. Query params: `limit` (default 20), `offset` (default 0).
 
 ### `GET /metrics`
-Exposes system indicators in Prometheus exposition format.
+Prometheus exposition format. Scraped at `/metrics`.
 
 ### `GET /health`
-Liveness and deep readiness verification probe.
+Liveness and dependency readiness probe. Returns `status`, `redis`, `openai_key`.
 
 ### `GET /tools`
-Lists active registry tools and metadata.
+Registered tool names and input schemas.
 
 ### `POST /evaluation`
-Runs automated validation metrics on structured testing inputs.
+Runs the evaluation harness on synthetic ticket data. Returns accuracy, latency, and escalation rate.
 
 ---
 
-## Verification & Testing
+## Observability
 
-```bash
-# Run test suite
-pytest -q
+### Prometheus Metrics
 
-# Run with test coverage metrics
-pytest --cov=app --cov-report=term-missing
+| Metric | Type | Labels |
+|---|---|---|
+| `agentops_requests_total` | Counter | `route`, `status` |
+| `agentops_request_latency_seconds` | Histogram | `route` |
+| `agentops_tool_execution_total` | Counter | `tool_name`, `status` |
+| `agentops_tool_execution_latency_seconds` | Histogram | `tool_name` |
+| `agentops_verifier_escalations_total` | Counter | — |
+
+### Structured Logging
+
+Every log line is a flat JSON object with `trace_id` injected automatically via `contextvars.ContextVar`:
+
+```json
+{
+  "timestamp": "2026-07-03T10:00:00.000Z",
+  "level": "info",
+  "event": "request_received",
+  "trace_id": "550e8400-e29b-41d4-...",
+  "customer_id": "cust_123"
+}
 ```
 
 ---
 
-## System Design Guarantees
+## Testing
 
-- **Provider Abstraction**: Decoupled agent behavior from external dependency libraries. All language processors consume abstract base classes.
-- **FSM State Safety**: Transitions enforce state progress via strict state transitions. Any unauthorized change calls fail fast.
-- **Structured Observability**: Logs compile to flat-dictionary JSON structures. Context tracking is preserved across async runtime calls via local contextvars.
-- **Config Initialization Safety**: App configuration parses explicitly at startup utilizing schema models; the application panics immediately on invalid or missing configurations.
-- **Eviction-capped Storage**: Local in-memory trace indexing enforces strict storage bounds (10,000 trace ceiling) using LRU-eviction locks.
+```bash
+pytest -q                                       # full suite
+pytest --cov=app --cov-report=term-missing      # with coverage
+ruff check .                                    # lint
+mypy app                                        # type check
+```
+
+---
+
+## Design Notes
+
+- **Provider abstraction** — agents depend on ABCs, not concrete implementations. Swap `DeterministicClassifierProvider` for `OpenAIClassificationProvider` at the injection site, nothing else changes.
+- **FSM enforcement** — `VALID_TRANSITIONS` in `state_machine.py` declares all legal state moves. Illegal transitions raise `InvalidTransitionError` immediately.
+- **Structured exceptions** — `AgentOpsError` hierarchy maps error types to HTTP status codes in middleware, not in handlers.
+- **Trace storage** — `InMemoryTraceStore` (default, LRU-capped at 10,000) or `RedisTraceStore` (set `TRACE_BACKEND=redis`). Both implement the same `TraceStore` protocol.
+- **Retry logic** — tool execution uses `tenacity` with exponential backoff. Configurable per-tool.
