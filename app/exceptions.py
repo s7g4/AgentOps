@@ -124,3 +124,16 @@ class WorkflowNotFoundError(WorkflowError):
 
 class WorkflowExecutionError(WorkflowError):
     """Raised when workflow step execution fails."""
+
+# ── Multi-agent messaging (Version 4) ─────────────────────────────────────────
+
+class AgentError(AgentOpsError):
+    """Base class for multi-agent messaging errors."""
+
+
+class AgentNotFoundError(AgentError):
+    """Raised when an agent name is not registered in AgentRegistry."""
+
+
+class AgentRoutingError(AgentError):
+    """Raised when the supervisor cannot route a subtask."""
