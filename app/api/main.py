@@ -33,8 +33,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Eagerly instantiate singletons to catch mis-configuration at startup,
     # not on the first request under production load.
-    from app.api.deps import (  # noqa: PLC0415  # noqa: PLC0415
+    from app.api.deps import (  # noqa: PLC0415  # noqa: PLC0415  # noqa: PLC0415
+        get_agent_registry,
         get_runtime,
+        get_supervisor,
         get_tool_registry,
         get_trace_store,
         get_workflow_executor,
@@ -46,6 +48,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.trace_store = get_trace_store()
     app.state.workflow_store = get_workflow_store()
     app.state.workflow_executor = get_workflow_executor()
+    app.state.agent_registry = get_agent_registry()
+    app.state.supervisor = get_supervisor()
 
     yield
 

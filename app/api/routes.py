@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.endpoints.agents import agents_router
 from app.api.endpoints.evaluation import evaluation_router
 from app.api.endpoints.health import health_router
 from app.api.endpoints.messages import messages_router
@@ -17,3 +18,4 @@ router.include_router(metrics_router)
 router.include_router(health_router)
 router.include_router(tools_router)
 router.include_router(workflows_router)
+router.include_router(agents_router)

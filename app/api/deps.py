@@ -4,10 +4,13 @@ from functools import lru_cache
 
 from app.agents.classifier.classifier_agent import ClassifierAgent
 from app.agents.planner.planner_agent import PlannerAgent
+from app.agents.registry import AgentRegistry
 from app.agents.response_generator.response_generator_agent import ResponseGeneratorAgent
 from app.agents.verifier.verifier_agent import VerifierAgent
 from app.config.settings import load_settings
 from app.logging.structured_logger import configure_structlog
+from app.messaging.bus import AgentBus
+from app.messaging.supervisor import SupervisorAgent
 from app.registry.tool_registry import ToolRegistry
 from app.runtime.runtime import AgentOpsRuntime
 from app.runtime.trace_store import RedisTraceStore, TraceStore
@@ -56,6 +59,22 @@ def get_workflow_executor() -> AsyncWorkflowExecutor:
         tool_registry=get_tool_registry(),
         store=get_workflow_store(),
     )
+
+
+@lru_cache(maxsize=1)
+def get_agent_registry() -> AgentRegistry:
+    """Return the default AgentRegistry pre-loaded with built-in agents."""
+    return AgentRegistry.default()
+
+
+@lru_cache(maxsize=1)
+def get_agent_bus() -> AgentBus:
+    return AgentBus()
+
+
+@lru_cache(maxsize=1)
+def get_supervisor() -> SupervisorAgent:
+    return SupervisorAgent(bus=get_agent_bus(), registry=get_agent_registry())
 
 
 @lru_cache(maxsize=1)
