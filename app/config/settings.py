@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     auth_enabled: bool = False
     api_key: str | None = Field(default=None, repr=False)
 
+    # OpenTelemetry — disabled by default; opt-in for production observability.
+    # When enabled, traces are exported to the configured OTLP gRPC endpoint.
+    otel_enabled: bool = False
+    otel_endpoint: str = "http://localhost:4317"
+    otel_service_name: str = "agentops"
 
 _settings: Settings | None = None
 
