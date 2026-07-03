@@ -21,6 +21,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = load_settings()
     configure_structlog(log_level=settings.log_level)
 
+    # ── OpenTelemetry (opt-in) ────────────────────────────────────────────────
+    if settings.otel_enabled:
+        from app.telemetry import configure_otel, instrument_fastapi  # noqa: PLC0415
+
+        configure_otel(
+            service_name=settings.otel_service_name,
+            endpoint=settings.otel_endpoint,
+        )
+        instrument_fastapi(app)
+
     # Eagerly instantiate singletons to catch mis-configuration at startup,
     # not on the first request under production load.
     from app.api.deps import get_runtime, get_tool_registry, get_trace_store  # noqa: PLC0415
@@ -31,10 +41,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     yield
 
-    # Shutdown: close any open connections (Redis, etc.)
+    # ── Shutdown ──────────────────────────────────────────────────────────────
     store = getattr(app.state, "trace_store", None)
     if store is not None and hasattr(store, "close"):
         await store.close()
+
+    if settings.otel_enabled:
+        from app.telemetry import shutdown_otel  # noqa: PLC0415
+
+        shutdown_otel()
 
 
 def create_app() -> FastAPI:

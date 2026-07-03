@@ -47,6 +47,7 @@ from app.runtime.state_machine import RuntimeState, validate_transition
 from app.runtime.trace_store import TraceStore
 from app.schemas.messages import BatchRequest, BatchResponse, MessageRequest, MessageResponse
 from app.schemas.trace import AgentDecision, ToolCall, Trace, TraceEvent, utc_now_iso
+from app.telemetry import get_tracer
 
 settings = load_settings()
 configure_structlog(log_level=settings.log_level)
@@ -163,9 +164,12 @@ class AgentOpsRuntime:
             )
             logger.info("request_received", customer_id=req.customer_id, source=req.source)
 
-            # ── CLASSIFY ──────────────────────────────────────────────────────
+            # ── CLASSIFY ─────────────────────────────────────────────
             state = self._transition(trace, state, RuntimeState.CLASSIFIED)
-            classification = await self.classifier.classify(req.message)
+            with get_tracer().start_as_current_span("agentops.classify") as span:
+                classification = await self.classifier.classify(req.message)
+                span.set_attribute("intent", classification.intent)
+                span.set_attribute("confidence", classification.confidence)
             trace.agent_decisions.append(
                 AgentDecision(
                     agent="classifier",
@@ -177,10 +181,13 @@ class AgentOpsRuntime:
                 )
             )
 
-            # ── PLAN ──────────────────────────────────────────────────────────
+            # ── PLAN ──────────────────────────────────────────────────
             state = self._transition(trace, state, RuntimeState.PLANNING)
             logger.info("planning_started", intent=classification.intent)
-            plan = await self.planner.plan(classification.intent, req.message)
+            with get_tracer().start_as_current_span("agentops.plan") as span:
+                span.set_attribute("intent", classification.intent)
+                plan = await self.planner.plan(classification.intent, req.message)
+                span.set_attribute("tool_count", len(plan.tool_calls))
             self._record(trace, "plan", {"tool_calls": plan.tool_calls})
 
             # ── TOOL EXECUTION (parallel) ─────────────────────────────────────
@@ -233,12 +240,15 @@ class AgentOpsRuntime:
                             {"tool_name": tool_name, "status": "success"},
                         )
 
-            # ── VERIFY ────────────────────────────────────────────────────────
+            # ── VERIFY ───────────────────────────────────────────────
             state = self._transition(trace, state, RuntimeState.VERIFYING)
             logger.info("verification_started")
-            verification = await self.verifier.verify(
-                classification.intent, tool_outputs, req.message
-            )
+            with get_tracer().start_as_current_span("agentops.verify") as span:
+                verification = await self.verifier.verify(
+                    classification.intent, tool_outputs, req.message
+                )
+                span.set_attribute("escalated", verification.escalated)
+                span.set_attribute("confidence", verification.confidence)
             trace.agent_decisions.append(
                 AgentDecision(
                     agent="verifier",
