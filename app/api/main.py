@@ -33,11 +33,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Eagerly instantiate singletons to catch mis-configuration at startup,
     # not on the first request under production load.
-    from app.api.deps import get_runtime, get_tool_registry, get_trace_store  # noqa: PLC0415
+    from app.api.deps import (  # noqa: PLC0415  # noqa: PLC0415
+        get_runtime,
+        get_tool_registry,
+        get_trace_store,
+        get_workflow_executor,
+        get_workflow_store,
+    )
 
     app.state.runtime = get_runtime()
     app.state.tool_registry = get_tool_registry()
     app.state.trace_store = get_trace_store()
+    app.state.workflow_store = get_workflow_store()
+    app.state.workflow_executor = get_workflow_executor()
 
     yield
 
@@ -45,6 +53,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     store = getattr(app.state, "trace_store", None)
     if store is not None and hasattr(store, "close"):
         await store.close()
+
+    wf_store = getattr(app.state, "workflow_store", None)
+    if wf_store is not None and hasattr(wf_store, "close"):
+        await wf_store.close()
 
     if settings.otel_enabled:
         from app.telemetry import shutdown_otel  # noqa: PLC0415

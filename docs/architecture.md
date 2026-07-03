@@ -118,6 +118,7 @@ class ClassifierAgent:
 ```
 
 To wire in OpenAI (V2):
+
 ```python
 ClassifierAgent(provider=OpenAIClassificationProvider(client=openai_client))
 ```
@@ -129,18 +130,21 @@ This follows the Open/Closed principle: new providers extend, not modify, the ag
 ## Observability
 
 ### Prometheus Metrics
+
 Exposed at `GET /metrics` in text exposition format.
 
-| Metric | Type | Labels |
-|---|---|---|
-| `agentops_requests_total` | Counter | `route`, `status` |
-| `agentops_request_latency_seconds` | Histogram | `route` |
-| `agentops_tool_execution_total` | Counter | `tool_name`, `status` |
-| `agentops_tool_execution_latency_seconds` | Histogram | `tool_name` |
-| `agentops_verifier_escalations_total` | Counter | — |
+| Metric                                    | Type      | Labels                |
+| ----------------------------------------- | --------- | --------------------- |
+| `agentops_requests_total`                 | Counter   | `route`, `status`     |
+| `agentops_request_latency_seconds`        | Histogram | `route`               |
+| `agentops_tool_execution_total`           | Counter   | `tool_name`, `status` |
+| `agentops_tool_execution_latency_seconds` | Histogram | `tool_name`           |
+| `agentops_verifier_escalations_total`     | Counter   | —                     |
 
 ### Structured Logging
+
 Every log line is a JSON object:
+
 ```json
 {
   "timestamp": "2026-07-02T16:00:00.000Z",
@@ -155,7 +159,9 @@ Every log line is a JSON object:
 `trace_id` is injected automatically via `contextvars.ContextVar` — no manual passing required.
 
 ### Execution Traces
+
 Every request produces a structured `Trace` stored in `TraceStore`:
+
 ```json
 {
   "trace_id": "...",
@@ -188,15 +194,3 @@ def get_trace_store() -> TraceStore: ...
 
 These are bound to `app.state` at startup for direct access in tests.
 `override_settings()` in `app/config/settings.py` allows test isolation.
-
----
-
-## Versioned Roadmap
-
-| Version | Core Addition |
-|---|---|
-| **V1** | FSM Runtime, 4 agents, tool registry, metrics, evaluation |
-| **V2** | OpenAI LLM providers, async handlers, Redis TraceStore, auth middleware |
-| **V3** | DAG workflow engine (steps, fan-out, conditional branches, retries) |
-| **V4** | Multi-agent messaging, supervisor pattern, agent registry |
-| **V5** | Multi-tenancy, RBAC, audit log, SLA enforcement, plugin system |

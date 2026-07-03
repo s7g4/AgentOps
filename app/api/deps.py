@@ -11,6 +11,8 @@ from app.logging.structured_logger import configure_structlog
 from app.registry.tool_registry import ToolRegistry
 from app.runtime.runtime import AgentOpsRuntime
 from app.runtime.trace_store import RedisTraceStore, TraceStore
+from app.workflows.executor import AsyncWorkflowExecutor
+from app.workflows.store import InMemoryWorkflowStore, RedisWorkflowStore
 
 _settings = load_settings()
 configure_structlog(log_level=_settings.log_level)
@@ -33,6 +35,27 @@ def get_trace_store() -> TraceStore | RedisTraceStore:
     if settings.trace_backend == "redis" and settings.redis_url:
         return RedisTraceStore(redis_url=settings.redis_url)
     return TraceStore.default()
+
+
+@lru_cache(maxsize=1)
+def get_workflow_store() -> InMemoryWorkflowStore | RedisWorkflowStore:
+    """Return the configured workflow store.
+
+    Reuses trace_backend — if Redis is configured for traces, workflows
+    also use Redis.  No new settings required.
+    """
+    settings = load_settings()
+    if settings.trace_backend == "redis" and settings.redis_url:
+        return RedisWorkflowStore(redis_url=settings.redis_url)
+    return InMemoryWorkflowStore()
+
+
+@lru_cache(maxsize=1)
+def get_workflow_executor() -> AsyncWorkflowExecutor:
+    return AsyncWorkflowExecutor(
+        tool_registry=get_tool_registry(),
+        store=get_workflow_store(),
+    )
 
 
 @lru_cache(maxsize=1)
