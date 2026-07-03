@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import inspect
+from typing import cast
+
 from app.providers.base import (
     AnyClassificationProvider,
-    AsyncClassificationProvider,
     ClassificationProvider,
 )
 from app.schemas.classification import Classification
@@ -35,7 +37,6 @@ class ClassifierAgent:
         )
 
     async def classify(self, message: str) -> Classification:
-        if isinstance(self.provider, AsyncClassificationProvider):
-            return await self.provider.classify(message)
-
-        return self.provider.classify(message)
+        if inspect.iscoroutinefunction(self.provider.classify):
+            return await self.provider.classify(message)  # type: ignore[no-any-return]
+        return cast(Classification, self.provider.classify(message))

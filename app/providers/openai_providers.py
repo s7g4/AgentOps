@@ -31,11 +31,11 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, cast
+from typing import Any
 
 from openai import APIStatusError, AsyncOpenAI, AuthenticationError
 from openai import RateLimitError as OpenAIRateLimitError
-from openai.types.chat import ChatCompletionToolParam
+from openai.types.chat import ChatCompletionMessageFunctionToolCall
 
 from app.exceptions import (
     AgentOpsError,
@@ -150,7 +150,10 @@ class OpenAIPlanningProvider(AsyncPlanningProvider):
         model: str = "gpt-4o-mini",
     ) -> None:
         self._client = _make_client(api_key)
-        self._tool_schemas = tool_schemas
+        # Store as list[Any] — the OpenAI SDK accepts these as tool dicts at runtime.
+        # We cannot use ChatCompletionToolParam directly here because tool_schemas
+        # originate from ToolRegistry as plain dicts.
+        self._tool_schemas: list[Any] = tool_schemas
         self._model = model
 
     async def plan(self, intent: str, message: str) -> ToolPlan:
@@ -162,11 +165,11 @@ class OpenAIPlanningProvider(AsyncPlanningProvider):
             "Select the appropriate tools to answer the customer. "
             "Only call tools that are directly relevant."
         )
-        tools_cast = [cast(ChatCompletionToolParam, t) for t in self._tool_schemas]
+        tools_list: list[Any] = self._tool_schemas
         try:
             resp = await self._client.chat.completions.create(
                 model=self._model,
-                tools=tools_cast,
+                tools=tools_list,
                 tool_choice="auto",
                 messages=[
                     {"role": "system", "content": system},
@@ -181,16 +184,15 @@ class OpenAIPlanningProvider(AsyncPlanningProvider):
         msg = resp.choices[0].message
         if msg.tool_calls:
             for tc in msg.tool_calls:
-                function = getattr(tc, "function", None)
-                if function is None:
+                if not isinstance(tc, ChatCompletionMessageFunctionToolCall):
                     continue
                 try:
-                    raw_input = json.loads(function.arguments)
+                    raw_input = json.loads(tc.function.arguments)
                 except json.JSONDecodeError as exc:
                     raise PlanningError(
-                        f"Tool call arguments are not valid JSON: {function.arguments!r}"
+                        f"Tool call arguments are not valid JSON: {tc.function.arguments!r}"
                     ) from exc
-                tool_calls.append({"tool_name": function.name, "input": raw_input})
+                tool_calls.append({"tool_name": tc.function.name, "input": raw_input})
 
         return ToolPlan(tool_calls=tool_calls)
 

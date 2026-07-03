@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import inspect
+from typing import cast
+
 from app.providers.base import (
     AnyVerificationProvider,
-    AsyncVerificationProvider,
     VerificationProvider,
 )
 from app.schemas.verification import VerificationResult
@@ -33,7 +35,11 @@ class VerifierAgent:
     async def verify(
         self, intent: str, tool_outputs: list[dict[str, object]], original_message: str
     ) -> VerificationResult:
-        if isinstance(self.provider, AsyncVerificationProvider):
-            return await self.provider.verify(intent, tool_outputs, original_message)
-
-        return self.provider.verify(intent, tool_outputs, original_message)
+        if inspect.iscoroutinefunction(self.provider.verify):
+            return await self.provider.verify(  # type: ignore[no-any-return]
+                intent, tool_outputs, original_message
+            )
+        return cast(
+            VerificationResult,
+            self.provider.verify(intent, tool_outputs, original_message),
+        )
