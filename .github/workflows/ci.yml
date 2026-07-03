@@ -19,11 +19,8 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install ".[dev]" || pip install .
-          pip install pytest-cov pydantic-settings
+      - name: Install package with dev dependencies
+        run: pip install -e ".[dev]"
 
       - name: Lint (ruff)
         run: ruff check .
@@ -42,13 +39,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build Docker image
         run: docker build -t agentops:ci .
 
       - name: Smoke test image
         run: |
           docker run -d --name agentops_ci -p 8000:8000 agentops:ci
-          sleep 5
-          curl -f http://localhost:8000/health || (docker logs agentops_ci && exit 1)
+          sleep 6
+          curl -sf http://localhost:8000/health || (docker logs agentops_ci && exit 1)
           docker stop agentops_ci
           docker rm agentops_ci
