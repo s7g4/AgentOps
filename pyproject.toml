@@ -63,6 +63,14 @@ explicit_package_bases = true
 mypy_path = "."
 files = ["app"]
 
+[[tool.mypy.overrides]]
+module = "opentelemetry.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "app.telemetry.*"
+warn_unused_ignores = false
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

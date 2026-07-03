@@ -19,9 +19,10 @@ Design decisions
    produce child spans for classify → plan → tool_exec → verify → respond.
    This gives per-stage latency breakdowns in the trace waterfall.
 
-5. **No-op when disabled**.
+5. **No-op when disabled or not installed**.
    All functions check ``settings.otel_enabled`` and return a no-op tracer
-   when OTel is off, so call sites never need conditional logic.
+   when OTel is off or the SDK is not installed, so call sites never need
+   conditional logic.
 
 Usage
 ─────
@@ -33,7 +34,7 @@ Set environment variables before startup:
 
 Then instrument spans in the runtime::
 
-    from app.telemetry.otel import get_tracer
+    from app.telemetry import get_tracer
 
     with get_tracer().start_as_current_span("classify") as span:
         result = await classifier.classify(message)
@@ -44,16 +45,59 @@ Then instrument spans in the runtime::
 from __future__ import annotations
 
 import logging
-
-from opentelemetry import trace
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from contextlib import contextmanager
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_tracer: trace.Tracer | None = None
-_provider: TracerProvider | None = None
+# ── Lazy OTel imports ─────────────────────────────────────────────────────────
+# The opentelemetry SDK is in the optional [otel] extras group and may not be
+# installed (e.g. CI, local dev).  We guard all SDK imports behind try/except
+# and provide a lightweight no-op tracer shim so the rest of the codebase can
+# call get_tracer() unconditionally.
+
+try:
+    from opentelemetry import trace as _otel_trace
+    from opentelemetry.sdk.resources import Resource as _Resource
+    from opentelemetry.sdk.trace import TracerProvider as _TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor as _BatchSpanProcessor
+
+    _HAS_OTEL = True
+except ImportError:
+    _HAS_OTEL = False
+
+_tracer: Any = None
+_provider: Any = None
+
+
+# ── No-op shim ────────────────────────────────────────────────────────────────
+# When OTel is not installed, get_tracer() returns this shim.  It implements
+# start_as_current_span() as a zero-cost context manager so all call sites
+# (``with get_tracer().start_as_current_span("name"):``) work without error.
+
+
+class _NoopSpan:
+    """Minimal span-like object that does nothing."""
+
+    def set_attribute(self, key: str, value: object) -> None:  # noqa: ARG002
+        pass
+
+    def set_status(self, *args: object, **kwargs: object) -> None:
+        pass
+
+    def record_exception(self, exc: BaseException) -> None:  # noqa: ARG002
+        pass
+
+
+class _NoopTracer:
+    """Minimal tracer that returns no-op spans."""
+
+    @contextmanager  # type: ignore[arg-type]
+    def start_as_current_span(self, name: str, **kwargs: object) -> Any:  # noqa: ARG002
+        yield _NoopSpan()
+
+
+_NOOP_TRACER = _NoopTracer()
 
 
 def configure_otel(
@@ -66,6 +110,13 @@ def configure_otel(
     Safe to call multiple times — subsequent calls are no-ops.
     """
     global _tracer, _provider  # noqa: PLW0603
+
+    if not _HAS_OTEL:
+        logger.warning(
+            "opentelemetry SDK is not installed. "
+            "Install it with: pip install 'agentops[otel]'"
+        )
+        return
 
     if _provider is not None:
         return  # already initialised
@@ -81,7 +132,7 @@ def configure_otel(
         )
         return
 
-    resource = Resource.create(
+    resource = _Resource.create(
         {
             "service.name": service_name,
             "service.version": "2.0.0",
@@ -90,13 +141,13 @@ def configure_otel(
     )
 
     exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
-    processor = BatchSpanProcessor(exporter)
+    processor = _BatchSpanProcessor(exporter)
 
-    provider = TracerProvider(resource=resource)
+    provider = _TracerProvider(resource=resource)
     provider.add_span_processor(processor)
 
     # Register as the global provider so opentelemetry.trace.get_tracer() works.
-    trace.set_tracer_provider(provider)
+    _otel_trace.set_tracer_provider(provider)
 
     _provider = provider
     _tracer = provider.get_tracer("agentops.runtime")
@@ -104,18 +155,19 @@ def configure_otel(
     logger.info("OpenTelemetry configured (endpoint=%s, service=%s)", endpoint, service_name)
 
 
-def get_tracer() -> trace.Tracer:
+def get_tracer() -> Any:
     """Return the active tracer.
 
-    Returns the configured OTel tracer when OTEL_ENABLED=true, or a no-op
-    tracer from the default provider otherwise.  Call sites need no conditional
-    checks — ``start_as_current_span`` on a no-op tracer is a zero-cost context
-    manager.
+    Returns the configured OTel tracer when OTEL_ENABLED=true and the SDK
+    is installed, or a no-op tracer otherwise.  Call sites need no conditional
+    checks — ``start_as_current_span`` on the no-op tracer is a zero-cost
+    context manager.
     """
     if _tracer is not None:
         return _tracer
-    # Return a no-op tracer — spans created from it are discarded.
-    return trace.get_tracer("agentops.noop")
+    if _HAS_OTEL:
+        return _otel_trace.get_tracer("agentops.noop")
+    return _NOOP_TRACER
 
 
 def instrument_fastapi(app: object) -> None:
