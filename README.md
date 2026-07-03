@@ -2,9 +2,8 @@
 
 A reference-quality, production-grade orchestrator demonstrating structured task routing, concurrent tool execution, observability, and evaluation.
 
-[![CI](https://github.com/your-org/agentops/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/agentops/actions)
+[![CI](https://github.com/your-org/agentops/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/agentops/actions/workflows/ci.yml)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
-[![Coverage: 96%](https://img.shields.io/badge/coverage-96%25-brightgreen.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -14,20 +13,19 @@ A reference-quality, production-grade orchestrator demonstrating structured task
 ```mermaid
 graph TD
     Client[HTTP Client] -->|POST /messages| API[FastAPI API Layer]
-    Client -->|GET /trace/{id}| API
+    Client -->|GET /trace/id| API
     Client -->|GET /metrics| API
-    
+
     subgraph API_Layer [API Transport]
-        API
-        Auth[APIKeyMiddleware] --> API
-        RateLimit[RateLimitMiddleware] --> Auth
+        RateLimit[RateLimitMiddleware] --> Auth[APIKeyMiddleware]
+        Auth --> API
     end
 
     API -->|invoke| Runtime[AgentOpsRuntime]
-    
+
     subgraph Runtime_FSM [Orchestrator FSM Engine]
-        Runtime
-        State[RuntimeState Validation FSM] <--> Runtime
+        Runtime --> State[RuntimeState FSM]
+        State --> Runtime
     end
 
     Runtime -->|1. Classify| Classifier[ClassifierAgent]
@@ -45,11 +43,11 @@ graph TD
 
     subgraph Tools [Tool Registry Layer]
         Executor -->|lookup| Registry[ToolRegistry]
-        Registry -->|validate & execute| CoreTools[Core Tools]
+        Registry -->|validate and execute| CoreTools[Core Tools]
     end
 
-    Runtime -->|Write timeline & outcomes| Store[TraceStore / RedisTraceStore]
-    Runtime -->|Observe latencies & state changes| Prometheus[Prometheus Client Metrics]
+    Runtime -->|Write timeline and outcomes| Store[TraceStore / RedisTraceStore]
+    Runtime -->|Observe latencies and state changes| Prometheus[Prometheus Client Metrics]
 ```
 
 See [docs/architecture.md](docs/architecture.md) for full component details.
@@ -94,12 +92,12 @@ docker compose up
 |---|---|---|
 | `HOST` | `0.0.0.0` | Bind address |
 | `PORT` | `8000` | Listen port |
-| `LOG_LEVEL` | `INFO` | `DEBUG`/`INFO`/`WARNING`/`ERROR` |
-| `OPENAI_API_KEY` | — | Required for upstream LLM execution |
-| `REDIS_URL` | — | Enables Redis-backed persistence |
+| `LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
+| `OPENAI_API_KEY` | — | Required for LLM-backed providers |
+| `REDIS_URL` | — | Enables Redis-backed trace persistence |
 | `TRACE_BACKEND` | `memory` | `memory` or `redis` |
 | `AUTH_ENABLED` | `false` | Enable API key header validation |
-| `API_KEY` | — | Target verification value when auth is enabled |
+| `API_KEY` | — | Required when `AUTH_ENABLED=true` |
 
 ---
 
