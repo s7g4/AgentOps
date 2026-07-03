@@ -7,8 +7,6 @@ import pytest
 from app.agents.builtin import EchoAgent, SummaryAgent
 from app.agents.registry import AgentRegistry
 from app.exceptions import AgentNotFoundError
-from app.messaging.message import AgentMessage
-
 
 # ── Register ──────────────────────────────────────────────────────────────────
 
