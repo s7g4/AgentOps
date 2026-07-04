@@ -38,11 +38,15 @@ class RouteRequest(BaseModel):
         max_length=1024,
         description="Human-readable description of the overall goal.",
     )
-    subtasks: list[SubTaskRequest] = Field(
-        ...,
+    subtasks: list[SubTaskRequest] | None = Field(
+        default=None,
         min_length=1,
-        description="Explicit list of subtasks to dispatch concurrently.",
+        description=(
+            "Explicit list of subtasks to dispatch concurrently. "
+            "If omitted, uses LLM/deterministic decomposer."
+        ),
     )
+
 
 
 class SubTaskResultResponse(BaseModel):
@@ -65,3 +69,11 @@ class RoutingResponse(BaseModel):
     results: list[SubTaskResultResponse]
     created_at: str
     duration_ms: float
+
+
+class RoutingListResponse(BaseModel):
+    """Paginated list of routing run histories."""
+
+    total: int
+    routes: list[RoutingResponse]
+
