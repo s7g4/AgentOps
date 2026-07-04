@@ -36,8 +36,11 @@ import time
 import uuid
 
 from app.agents.registry import AgentRegistry
+from app.exceptions import AgentRoutingError
 from app.messaging.bus import AgentBus
+from app.messaging.decomposition import DecompositionProvider
 from app.messaging.message import AgentMessage, RoutingResult, SubTask, SubTaskResult
+from app.messaging.routing_store import RoutingStoreProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -47,25 +50,37 @@ class SupervisorAgent:
 
     Parameters
     ----------
-    bus:      The AgentBus used to dispatch each SubTask.
-    registry: The AgentRegistry for agent resolution.
+    bus:        The AgentBus used to dispatch each SubTask.
+    registry:   The AgentRegistry for agent resolution.
+    decomposer: Decomposer to run if subtasks are omitted (optional).
+    store:      Storage backend for routing history (optional).
     """
 
-    def __init__(self, bus: AgentBus, registry: AgentRegistry) -> None:
+    def __init__(
+        self,
+        bus: AgentBus,
+        registry: AgentRegistry,
+        decomposer: DecompositionProvider | None = None,
+        store: RoutingStoreProtocol | None = None,
+    ) -> None:
         self._bus = bus
         self._registry = registry
+        self._decomposer = decomposer
+        self._store = store
 
     async def route(
         self,
         goal: str,
-        subtasks: list[SubTask],
+        subtasks: list[SubTask] | None = None,
     ) -> RoutingResult:
         """Dispatch all subtasks concurrently and return the RoutingResult.
+
+        If subtasks are not provided, uses the decomposer to generate them.
 
         Parameters
         ----------
         goal:     Human-readable description of the overall goal.
-        subtasks: List of SubTask directives to dispatch.
+        subtasks: List of SubTask directives to dispatch (optional).
 
         Returns
         -------
@@ -73,6 +88,14 @@ class SupervisorAgent:
         """
         routing_id = str(uuid.uuid4())
         wall_start = time.perf_counter()
+
+        if subtasks is None:
+            if self._decomposer is None:
+                raise AgentRoutingError(
+                    "Cannot route goal without explicit subtasks "
+                    "because no decomposer is configured."
+                )
+            subtasks = await self._decomposer.decompose(goal, self._registry.names())
 
         logger.info(
             "supervisor_routing_started",
@@ -114,6 +137,9 @@ class SupervisorAgent:
             duration_ms=round(total_ms, 2),
         )
 
+        if self._store is not None:
+            await self._store.put(result)
+
         logger.info(
             "supervisor_routing_completed",
             extra={
@@ -123,6 +149,7 @@ class SupervisorAgent:
             },
         )
         return result
+
 
     async def _dispatch(self, task: SubTask) -> SubTaskResult:
         """Dispatch a single SubTask on the bus and return its SubTaskResult."""

@@ -10,6 +10,16 @@ from app.agents.verifier.verifier_agent import VerifierAgent
 from app.config.settings import load_settings
 from app.logging.structured_logger import configure_structlog
 from app.messaging.bus import AgentBus
+from app.messaging.decomposition import (
+    DecompositionProvider,
+    DeterministicDecompositionProvider,
+    OpenAIDecompositionProvider,
+)
+from app.messaging.routing_store import (
+    InMemoryRoutingStore,
+    RedisRoutingStore,
+    RoutingStoreProtocol,
+)
 from app.messaging.supervisor import SupervisorAgent
 from app.registry.tool_registry import ToolRegistry
 from app.runtime.runtime import AgentOpsRuntime
@@ -62,6 +72,31 @@ def get_workflow_executor() -> AsyncWorkflowExecutor:
 
 
 @lru_cache(maxsize=1)
+def get_routing_store() -> RoutingStoreProtocol:
+    """Return the configured routing store.
+
+    Reuses trace_backend — if Redis is configured for traces, routing history
+    also uses Redis.
+    """
+    settings = load_settings()
+    if settings.trace_backend == "redis" and settings.redis_url:
+        return RedisRoutingStore(redis_url=settings.redis_url)
+    return InMemoryRoutingStore()
+
+
+@lru_cache(maxsize=1)
+def get_decomposition_provider() -> DecompositionProvider:
+    """Return the configured decomposition provider.
+
+    Uses OpenAI if the API key is set, otherwise falls back to deterministic.
+    """
+    settings = load_settings()
+    if settings.openai_api_key:
+        return OpenAIDecompositionProvider(api_key=settings.openai_api_key)
+    return DeterministicDecompositionProvider()
+
+
+@lru_cache(maxsize=1)
 def get_agent_registry() -> AgentRegistry:
     """Return the default AgentRegistry pre-loaded with built-in agents."""
     return AgentRegistry.default()
@@ -74,7 +109,12 @@ def get_agent_bus() -> AgentBus:
 
 @lru_cache(maxsize=1)
 def get_supervisor() -> SupervisorAgent:
-    return SupervisorAgent(bus=get_agent_bus(), registry=get_agent_registry())
+    return SupervisorAgent(
+        bus=get_agent_bus(),
+        registry=get_agent_registry(),
+        decomposer=get_decomposition_provider(),
+        store=get_routing_store(),
+    )
 
 
 @lru_cache(maxsize=1)
@@ -87,3 +127,4 @@ def get_runtime() -> AgentOpsRuntime:
         tool_registry=get_tool_registry(),
         trace_store=get_trace_store(),  # type: ignore[arg-type]
     )
+
