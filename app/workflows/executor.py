@@ -105,7 +105,10 @@ class AsyncWorkflowExecutor:
                 },
             )
             layer_results = await asyncio.gather(
-                *[self._execute_step(step, execution.context) for step in layer],
+                *[
+                    self._execute_step(step, execution.context, execution.step_results)
+                    for step in layer
+                ],
                 return_exceptions=True,
             )
 
@@ -175,14 +178,37 @@ class AsyncWorkflowExecutor:
         self,
         step: WorkflowStep,
         context: dict[str, object],
+        step_results: dict[str, StepResult],
     ) -> StepResult:
         """Execute a single step and return its StepResult.
 
-        Input resolution: static_input is the base; context values
-        overlay it (context can override static defaults).
+        Input resolution: static_input is resolved for templates, then
+        context values overlay it (context overrides static defaults).
         """
+        from app.workflows.template import resolve_templates  # noqa: PLC0415
+
         started_at = utc_now_iso()
-        merged_input: dict[str, object] = {**step.static_input, **context}
+
+        try:
+            resolved_static = resolve_templates(step.static_input, step_results)
+            merged_input: dict[str, object] = {**resolved_static, **context}
+        except Exception as exc:  # noqa: BLE001
+            finished_at = utc_now_iso()
+            logger.warning(
+                "workflow_step_template_failed",
+                extra={
+                    "step_id": step.id,
+                    "tool": step.tool_name,
+                    "error": str(exc),
+                },
+            )
+            return StepResult(
+                step_id=step.id,
+                status=StepStatus.FAILED,
+                error=str(exc),
+                started_at=started_at,
+                finished_at=finished_at,
+            )
 
         logger.info(
             "workflow_step_started",
@@ -221,3 +247,4 @@ class AsyncWorkflowExecutor:
                 started_at=started_at,
                 finished_at=finished_at,
             )
+

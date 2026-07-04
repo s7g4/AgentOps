@@ -151,3 +151,33 @@ def test_context_is_passed_to_step() -> None:
 
     assert result.status == WorkflowStatus.COMPLETED
     assert result.step_results["order"].output is not None
+
+
+# ── Step Output Chaining / Template resolution ────────────────────────────────
+
+def test_workflow_step_chaining_success() -> None:
+    """A workflow with step B referencing step A's output resolves the template correctly."""
+    executor, store = _make_executor()
+    step_a = WorkflowStep(
+        id="order1",
+        tool_name="check_order_status",
+        static_input={"order_id": "ORD-123"},
+    )
+    step_b = WorkflowStep(
+        id="order2",
+        tool_name="check_order_status",
+        static_input={"order_id": "$step.order1.status"},
+        depends_on=["order1"],
+    )
+    wf = _make_wf(step_a, step_b)
+    ex = WorkflowExecution(workflow_id=wf.id, context={})
+
+    result = asyncio.run(executor.run(wf, ex))
+
+    assert result.status == WorkflowStatus.COMPLETED
+    assert result.step_results["order1"].status == StepStatus.SUCCESS
+    assert result.step_results["order2"].status == StepStatus.SUCCESS
+    # order2 input should be resolved from order1 output status ("shipped")
+    assert result.step_results["order2"].output is not None
+    assert result.step_results["order2"].output["order_id"] == "shipped"
+
