@@ -1,7 +1,7 @@
 [project]
 name = "agentops"
-version = "0.1.0"
-description = "Production-grade AI Customer Operations Platform for SMBs"
+version = "1.0.0"
+description = "Multi-agent orchestration backend — FSM pipeline, workflow engine, and agent bus on one substrate"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }

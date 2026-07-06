@@ -48,6 +48,8 @@ import logging
 from contextlib import contextmanager
 from typing import Any
 
+from app import __version__
+
 logger = logging.getLogger(__name__)
 
 # ── Lazy OTel imports ─────────────────────────────────────────────────────────
@@ -135,7 +137,7 @@ def configure_otel(
     resource = _Resource.create(
         {
             "service.name": service_name,
-            "service.version": "2.0.0",
+            "service.version": __version__,
             "deployment.environment": "production",
         }
     )
