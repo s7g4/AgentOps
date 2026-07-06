@@ -23,6 +23,7 @@ from app.messaging.routing_store import (
     RoutingStoreProtocol,
 )
 from app.messaging.supervisor import SupervisorAgent
+from app.middleware.rate_limit import InMemoryRateLimiter, RateLimiter, RedisRateLimiter
 from app.registry.tool_registry import ToolRegistry
 from app.runtime.runtime import AgentOpsRuntime
 from app.runtime.trace_store import RedisTraceStore, TraceStore
@@ -70,6 +71,8 @@ def get_workflow_executor() -> AsyncWorkflowExecutor:
     return AsyncWorkflowExecutor(
         tool_registry=get_tool_registry(),
         store=get_workflow_store(),
+        agent_bus=get_agent_bus(),
+        agent_registry=get_agent_registry(),
     )
 
 
@@ -127,6 +130,21 @@ def get_supervisor() -> SupervisorAgent:
         decomposer=get_decomposition_provider(),
         store=get_routing_store(),
     )
+
+
+@lru_cache(maxsize=1)
+def get_rate_limiter() -> RateLimiter:
+    """Return the configured rate limiter.
+
+    "memory" is correct for a single process; "redis" shares the counter
+    across every replica behind the same host — required the moment more
+    than one process answers requests, otherwise each replica enforces its
+    own independent limit.
+    """
+    settings = load_settings()
+    if settings.rate_limit_backend == "redis" and settings.redis_url:
+        return RedisRateLimiter(redis_url=settings.redis_url)
+    return InMemoryRateLimiter()
 
 
 @lru_cache(maxsize=1)

@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app import __version__
 from app.api.routes import router
 from app.config.settings import load_settings
 from app.logging.structured_logger import configure_structlog
@@ -35,6 +36,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # not on the first request under production load.
     from app.api.deps import (  # noqa: PLC0415  # noqa: PLC0415  # noqa: PLC0415
         get_agent_registry,
+        get_rate_limiter,
         get_runtime,
         get_supervisor,
         get_tool_registry,
@@ -50,17 +52,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.workflow_executor = get_workflow_executor()
     app.state.agent_registry = get_agent_registry()
     app.state.supervisor = get_supervisor()
+    app.state.rate_limiter = get_rate_limiter()
 
     yield
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
-    store = getattr(app.state, "trace_store", None)
-    if store is not None and hasattr(store, "close"):
-        await store.close()
-
-    wf_store = getattr(app.state, "workflow_store", None)
-    if wf_store is not None and hasattr(wf_store, "close"):
-        await wf_store.close()
+    for state_key in ("trace_store", "workflow_store", "rate_limiter"):
+        resource = getattr(app.state, state_key, None)
+        if resource is not None and hasattr(resource, "close"):
+            await resource.close()
 
     if settings.otel_enabled:
         from app.telemetry import shutdown_otel  # noqa: PLC0415
@@ -73,10 +73,10 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="AgentOps",
-        version="2.0.0",
+        version=__version__,
         description=(
-            "Production-grade AI orchestration backend. "
-            "Classify → Plan → Execute → Verify → Respond."
+            "Multi-agent orchestration backend — FSM pipeline, workflow engine, "
+            "and agent bus on one substrate."
         ),
         lifespan=lifespan,
         docs_url="/docs",
@@ -89,9 +89,12 @@ def create_app() -> FastAPI:
     if settings.auth_enabled:
         app.add_middleware(APIKeyMiddleware)
 
+    from app.api.deps import get_rate_limiter  # noqa: PLC0415
+
     app.add_middleware(
         RateLimitMiddleware,
         config=RateLimitConfig(requests_per_window=200, window_seconds=60),
+        limiter=get_rate_limiter(),
     )
 
     app.include_router(router)
