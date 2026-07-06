@@ -19,16 +19,21 @@ Step execution
 Each step:
   - Merges context + step.static_input (context takes precedence for
     explicit overrides, static_input fills the rest).
-  - Calls ToolRegistry.execute() wrapped in asyncio.to_thread() to avoid
-    blocking the event loop on synchronous tool code.
-  - Records StepResult with timing.
+  - kind="tool": calls ToolRegistry.execute() wrapped in asyncio.to_thread()
+    to avoid blocking the event loop on synchronous tool code.
+  - kind="agent": posts an AgentMessage on the AgentBus and awaits the reply.
+    Agent handlers are already async, so no to_thread() wrapper is needed.
+  - Records StepResult with timing. Both kinds produce the same StepResult
+    shape, so template resolution ($step.<id>.<key>) doesn't care which
+    kind produced an upstream output.
 
-Why asyncio.to_thread?
-──────────────────────
+Why asyncio.to_thread for tools but not agents?
+────────────────────────────────────────────────
 Existing tools (CheckOrderStatusTool, RefundPolicyTool) are synchronous.
 Running them directly in the event loop would block all other coroutines
 for their duration.  to_thread() runs them in the default thread pool
-so the event loop stays responsive.
+so the event loop stays responsive.  Agents are async by contract
+(RoutableAgent.handle is a coroutine), so they're awaited directly.
 """
 
 from __future__ import annotations
@@ -36,7 +41,10 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from app.agents.registry import AgentRegistry
 from app.exceptions import WorkflowExecutionError
+from app.messaging.bus import AgentBus
+from app.messaging.message import AgentMessage
 from app.registry.tool_registry import ToolRegistry
 from app.schemas.trace import utc_now_iso
 from app.workflows.definition import WorkflowDefinition, WorkflowStep
@@ -51,17 +59,25 @@ class AsyncWorkflowExecutor:
 
     Parameters
     ----------
-    tool_registry: Registry for resolving and executing tools.
-    store:         Persistence store — execution is checkpointed after each layer.
+    tool_registry:  Registry for resolving and executing tool-kind steps.
+    store:          Persistence store — execution is checkpointed after each layer.
+    agent_bus:      Bus for dispatching agent-kind steps. Optional — a workflow
+                    with no agent-kind steps never needs one.
+    agent_registry: Registry the bus resolves agent-kind step recipients against.
+                    Required if agent_bus is provided.
     """
 
     def __init__(
         self,
         tool_registry: ToolRegistry,
         store: WorkflowStoreProtocol,
+        agent_bus: AgentBus | None = None,
+        agent_registry: AgentRegistry | None = None,
     ) -> None:
         self._registry = tool_registry
         self._store = store
+        self._agent_bus = agent_bus
+        self._agent_registry = agent_registry
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -210,18 +226,17 @@ class AsyncWorkflowExecutor:
                 finished_at=finished_at,
             )
 
+        target = step.tool_name if step.kind == "tool" else step.agent_name
         logger.info(
             "workflow_step_started",
-            extra={"step_id": step.id, "tool": step.tool_name},
+            extra={"step_id": step.id, "kind": step.kind, "target": target},
         )
         try:
-            output: dict[str, object] = await asyncio.to_thread(
-                self._registry.execute, step.tool_name, merged_input
-            )
+            output = await self._dispatch(step, merged_input)
             finished_at = utc_now_iso()
             logger.info(
                 "workflow_step_succeeded",
-                extra={"step_id": step.id, "tool": step.tool_name},
+                extra={"step_id": step.id, "kind": step.kind, "target": target},
             )
             return StepResult(
                 step_id=step.id,
@@ -236,7 +251,8 @@ class AsyncWorkflowExecutor:
                 "workflow_step_failed",
                 extra={
                     "step_id": step.id,
-                    "tool": step.tool_name,
+                    "kind": step.kind,
+                    "target": target,
                     "error": str(exc),
                 },
             )
@@ -247,4 +263,24 @@ class AsyncWorkflowExecutor:
                 started_at=started_at,
                 finished_at=finished_at,
             )
+
+    async def _dispatch(
+        self, step: WorkflowStep, merged_input: dict[str, object]
+    ) -> dict[str, object]:
+        """Execute a single step's tool or agent call and return its raw output."""
+        if step.kind == "tool":
+            assert step.tool_name is not None  # enforced by WorkflowStep.__post_init__
+            return await asyncio.to_thread(self._registry.execute, step.tool_name, merged_input)
+
+        assert step.agent_name is not None  # enforced by WorkflowStep.__post_init__
+        if self._agent_bus is None or self._agent_registry is None:
+            raise WorkflowExecutionError(
+                f"Step {step.id!r} targets agent {step.agent_name!r} but this executor "
+                "was not configured with an agent_bus/agent_registry."
+            )
+        message = AgentMessage(
+            sender="workflow_executor", recipient=step.agent_name, payload=merged_input
+        )
+        reply = await self._agent_bus.send(message, self._agent_registry)
+        return reply.payload
 

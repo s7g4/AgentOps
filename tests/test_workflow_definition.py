@@ -152,3 +152,30 @@ def test_roundtrip_serialisation() -> None:
     assert restored.name == wf.name
     assert len(restored.steps) == 2
     assert restored.steps[1].depends_on == ["a"]
+
+
+# ── agent-kind steps ──────────────────────────────────────────────────────────
+
+def test_agent_step_requires_agent_name() -> None:
+    with pytest.raises(ValueError, match="agent_name is required"):
+        WorkflowStep(id="a", kind="agent")
+
+
+def test_tool_step_requires_tool_name() -> None:
+    with pytest.raises(ValueError, match="tool_name is required"):
+        WorkflowStep(id="a", kind="tool", tool_name=None)
+
+
+def test_agent_step_roundtrip_serialisation() -> None:
+    wf = WorkflowDefinition(
+        name="mixed",
+        steps=[
+            WorkflowStep(id="a", kind="agent", agent_name="echo"),
+            WorkflowStep(id="b", tool_name="refund_policy", depends_on=["a"]),
+        ],
+    )
+    restored = WorkflowDefinition.from_dict(wf.to_dict())
+    assert restored.steps[0].kind == "agent"
+    assert restored.steps[0].agent_name == "echo"
+    assert restored.steps[1].kind == "tool"
+    assert restored.steps[1].tool_name == "refund_policy"

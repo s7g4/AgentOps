@@ -24,6 +24,8 @@ Design decisions
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -45,11 +47,40 @@ from app.workflows.execution import WorkflowExecution
 from app.workflows.executor import AsyncWorkflowExecutor
 from app.workflows.store import InMemoryWorkflowStore, RedisWorkflowStore
 
+logger = logging.getLogger(__name__)
+
 workflows_router = APIRouter(prefix="/workflows", tags=["workflows"])
 
 # ── Type aliases for DI ───────────────────────────────────────────────────────
 
 WorkflowStore = InMemoryWorkflowStore | RedisWorkflowStore
+
+# Background workflow runs are fire-and-forget asyncio tasks. asyncio only
+# holds a *weak* reference to a task once nothing else references it, so
+# without this set a task can be garbage-collected mid-run — this set is
+# the strong reference that keeps it alive until it completes.
+_background_tasks: set[asyncio.Task[WorkflowExecution]] = set()
+
+
+def _run_in_background(
+    executor: AsyncWorkflowExecutor,
+    wf: WorkflowDefinition,
+    execution: WorkflowExecution,
+) -> None:
+    task = asyncio.create_task(executor.run(wf, execution))
+    _background_tasks.add(task)
+
+    def _on_done(t: asyncio.Task[WorkflowExecution]) -> None:
+        _background_tasks.discard(t)
+        if t.cancelled():
+            return
+        if (exc := t.exception()) is not None:
+            logger.error(
+                "background_workflow_run_failed",
+                extra={"execution_id": execution.execution_id, "error": str(exc)},
+            )
+
+    task.add_done_callback(_on_done)
 
 
 def _to_response(wf: WorkflowDefinition) -> WorkflowResponse:
@@ -60,7 +91,9 @@ def _to_response(wf: WorkflowDefinition) -> WorkflowResponse:
         steps=[
             WorkflowStepSchema(
                 id=s.id,
+                kind=s.kind,
                 tool_name=s.tool_name,
+                agent_name=s.agent_name,
                 static_input=s.static_input,
                 depends_on=s.depends_on,
             )
@@ -109,7 +142,9 @@ async def create_workflow(
     steps = [
         WorkflowStep(
             id=s.id,
+            kind=s.kind,
             tool_name=s.tool_name,
+            agent_name=s.agent_name,
             static_input=dict(s.static_input),
             depends_on=list(s.depends_on),
         )
@@ -178,11 +213,18 @@ async def run_workflow(
     store: Annotated[WorkflowStore, Depends(get_workflow_store)],
     executor: Annotated[AsyncWorkflowExecutor, Depends(get_workflow_executor)],
 ) -> ExecutionResponse:
-    """Execute a workflow and return the completed execution.
+    """Execute a workflow and return its execution.
 
-    The run is synchronous within the request — all steps execute before
-    the response is returned.  Each step runs inside asyncio.to_thread()
-    so the event loop is not blocked.
+    By default the run is synchronous within the request — all steps
+    execute before the response is returned. Each tool-kind step runs
+    inside asyncio.to_thread() so the event loop is not blocked.
+
+    With ``background=true``, the execution is persisted as PENDING and
+    handed to an in-process asyncio task immediately; the caller polls
+    GET .../runs/{execution_id} for progress. This is in-process only —
+    a run in flight is lost if the process restarts — which is the right
+    tradeoff for a single-container deployment; a durable queue is the
+    natural upgrade if that stops being true.
     """
     wf = await store.get_definition(workflow_id)
     if wf is None:
@@ -192,6 +234,12 @@ async def run_workflow(
         workflow_id=workflow_id,
         context=dict(body.context),
     )
+
+    if body.background:
+        await store.put_execution(execution)
+        _run_in_background(executor, wf, execution)
+        return _to_execution_response(execution)
+
     try:
         result = await executor.run(wf, execution)
     except Exception as exc:  # noqa: BLE001

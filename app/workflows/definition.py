@@ -26,9 +26,11 @@ from __future__ import annotations
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from app.schemas.trace import utc_now_iso
+
+StepKind = Literal["tool", "agent"]
 
 
 @dataclass
@@ -38,20 +40,35 @@ class WorkflowStep:
     Attributes
     ----------
     id:           Unique identifier within this workflow.
-    tool_name:    Name of a registered tool to execute.
+    kind:         "tool" (default) dispatches to ToolRegistry via tool_name;
+                  "agent" dispatches to AgentBus via agent_name. Both kinds
+                  produce the same StepResult shape, so downstream template
+                  resolution ($step.<id>.<key>) works identically either way.
+    tool_name:    Name of a registered tool to execute. Required when kind="tool".
+    agent_name:   Name of a registered agent to invoke. Required when kind="agent".
     static_input: Input dict merged with runtime context before execution.
     depends_on:   IDs of steps that must succeed before this step runs.
     """
 
     id: str
-    tool_name: str
+    kind: StepKind = "tool"
+    tool_name: str | None = None
+    agent_name: str | None = None
     static_input: dict[str, Any] = field(default_factory=dict)
     depends_on: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.kind == "tool" and not self.tool_name:
+            raise ValueError(f"Step {self.id!r}: tool_name is required when kind='tool'")
+        if self.kind == "agent" and not self.agent_name:
+            raise ValueError(f"Step {self.id!r}: agent_name is required when kind='agent'")
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
+            "kind": self.kind,
             "tool_name": self.tool_name,
+            "agent_name": self.agent_name,
             "static_input": self.static_input,
             "depends_on": self.depends_on,
         }
@@ -60,7 +77,9 @@ class WorkflowStep:
     def from_dict(cls, d: dict[str, Any]) -> WorkflowStep:
         return cls(
             id=d["id"],
-            tool_name=d["tool_name"],
+            kind=d.get("kind", "tool"),
+            tool_name=d.get("tool_name"),
+            agent_name=d.get("agent_name"),
             static_input=d.get("static_input", {}),
             depends_on=d.get("depends_on", []),
         )

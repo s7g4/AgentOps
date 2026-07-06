@@ -6,22 +6,45 @@ app/workflows/definition.py and app/workflows/execution.py.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from typing import Literal
+
+from pydantic import BaseModel, Field, model_validator
 
 
 class WorkflowStepSchema(BaseModel):
-    """A single step in a workflow definition."""
+    """A single step in a workflow definition.
+
+    Exactly one of tool_name / agent_name must be set, matching kind.
+    """
 
     id: str = Field(..., description="Step identifier, unique within this workflow.")
-    tool_name: str = Field(..., description="Name of the registered tool to execute.")
+    kind: Literal["tool", "agent"] = Field(
+        default="tool", description="Whether this step calls a tool or an agent."
+    )
+    tool_name: str | None = Field(
+        default=None,
+        description="Name of the registered tool to execute. Required for kind='tool'.",
+    )
+    agent_name: str | None = Field(
+        default=None,
+        description="Name of the registered agent to invoke. Required for kind='agent'.",
+    )
     static_input: dict[str, object] = Field(
         default_factory=dict,
-        description="Input merged with runtime context before tool execution.",
+        description="Input merged with runtime context before execution.",
     )
     depends_on: list[str] = Field(
         default_factory=list,
         description="IDs of steps that must complete successfully before this step runs.",
     )
+
+    @model_validator(mode="after")
+    def _check_target(self) -> WorkflowStepSchema:
+        if self.kind == "tool" and not self.tool_name:
+            raise ValueError(f"Step {self.id!r}: tool_name is required when kind='tool'")
+        if self.kind == "agent" and not self.agent_name:
+            raise ValueError(f"Step {self.id!r}: agent_name is required when kind='agent'")
+        return self
 
 
 class CreateWorkflowRequest(BaseModel):
@@ -58,6 +81,15 @@ class RunWorkflowRequest(BaseModel):
     context: dict[str, object] = Field(
         default_factory=dict,
         description="Runtime key-value pairs merged into every step's input.",
+    )
+    background: bool = Field(
+        default=False,
+        description=(
+            "If true, return immediately with a PENDING execution and run the "
+            "workflow in the background; poll GET .../runs/{execution_id} for "
+            "the result. If false (default), the request blocks until the "
+            "workflow finishes."
+        ),
     )
 
 

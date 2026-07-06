@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -27,7 +29,7 @@ _TWO_STEP_WORKFLOW = {
 
 @pytest.fixture()
 def client() -> TestClient:
-    override_settings(Settings())
+    override_settings(Settings(redis_url=None))
     app = create_app()
     with TestClient(app) as c:
         yield c
@@ -178,3 +180,48 @@ def test_get_run_wrong_workflow_returns_404(client: TestClient) -> None:
 
     r = client.get(f"/workflows/other-wf-id/runs/{exec_id}")
     assert r.status_code == 404
+
+
+# ── Background execution ──────────────────────────────────────────────────────
+
+def _poll_until_finished(
+    client: TestClient, wf_id: str, exec_id: str, attempts: int = 50
+) -> dict[str, object]:
+    for _ in range(attempts):
+        data = client.get(f"/workflows/{wf_id}/runs/{exec_id}").json()
+        if data["status"] in ("completed", "failed"):
+            return data
+        time.sleep(0.02)
+    raise AssertionError(f"execution {exec_id} did not finish in time: {data}")
+
+
+def test_background_run_returns_immediately_as_pending(client: TestClient) -> None:
+    wf_id = client.post("/workflows", json=_VALID_WORKFLOW).json()["id"]
+    r = client.post(f"/workflows/{wf_id}/run", json={"context": {}, "background": True})
+
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "pending"
+    assert data["step_results"] == {}
+
+
+def test_background_run_eventually_completes(client: TestClient) -> None:
+    wf_id = client.post("/workflows", json=_VALID_WORKFLOW).json()["id"]
+    started = client.post(f"/workflows/{wf_id}/run", json={"context": {}, "background": True})
+    exec_id = started.json()["execution_id"]
+
+    finished = _poll_until_finished(client, wf_id, exec_id)
+
+    assert finished["status"] == "completed"
+    assert finished["step_results"]["step1"]["status"] == "success"
+
+
+def test_background_run_is_visible_in_run_history_while_pending(client: TestClient) -> None:
+    wf_id = client.post("/workflows", json=_VALID_WORKFLOW).json()["id"]
+    started = client.post(f"/workflows/{wf_id}/run", json={"context": {}, "background": True})
+    exec_id = started.json()["execution_id"]
+
+    listing = client.get(f"/workflows/{wf_id}/runs").json()
+    assert any(e["execution_id"] == exec_id for e in listing["executions"])
+
+    _poll_until_finished(client, wf_id, exec_id)
