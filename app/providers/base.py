@@ -7,8 +7,9 @@ Synchronous (``ClassificationProvider``, ``PlanningProvider``, etc.)
   No I/O, instant — safe to call directly from async code.
 
 Asynchronous (``AsyncClassificationProvider``, etc.)
-  Used by LLM-backed providers (OpenAI, Anthropic …) where the call is
-  network-bound and MUST be awaited so the event loop remains responsive.
+  Used by LLM-backed providers (OpenAI or any other hosted model API) where
+  the call is network-bound and MUST be awaited so the event loop remains
+  responsive.
 
 The agents accept *either* tier via a union type and detect at runtime
 which calling convention to use (``asyncio.iscoroutinefunction``).

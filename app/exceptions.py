@@ -25,7 +25,12 @@ AgentOpsError
  ├── VerificationError         — verifier agent fatal error (≠ escalation)
  ├── AuthError                 — authentication / authorisation failure
  ├── RateLimitError            — request rate exceeded
- └── WorkflowError             — workflow engine (Version 3)
+ ├── WorkflowError             — workflow engine
+ │    ├── WorkflowNotFoundError
+ │    └── WorkflowExecutionError
+ └── AgentError                — multi-agent messaging / routing
+      ├── AgentNotFoundError
+      └── AgentRoutingError
 """
 
 from __future__ import annotations
@@ -112,10 +117,10 @@ class RateLimitError(AgentOpsError):
     """
 
 
-# ── Workflow engine (Version 3 placeholder) ────────────────────────────────────
+# ── Workflow engine ────────────────────────────────────────────────────────────
 
 class WorkflowError(AgentOpsError):
-    """Base class for workflow engine errors (implemented in Version 3)."""
+    """Base class for workflow engine errors."""
 
 
 class WorkflowNotFoundError(WorkflowError):
@@ -125,7 +130,7 @@ class WorkflowNotFoundError(WorkflowError):
 class WorkflowExecutionError(WorkflowError):
     """Raised when workflow step execution fails."""
 
-# ── Multi-agent messaging (Version 4) ─────────────────────────────────────────
+# ── Multi-agent messaging ─────────────────────────────────────────────────────
 
 class AgentError(AgentOpsError):
     """Base class for multi-agent messaging errors."""

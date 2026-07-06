@@ -1,0 +1,36 @@
+# Render Blueprint — provisions the web service and a managed Redis
+# instance together. In the Render dashboard: New -> Blueprint -> point
+# at this repo. Vars marked `sync: false` are prompted for in the
+# dashboard, never stored in this file.
+
+services:
+  - type: web
+    name: agentops
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: LOG_LEVEL
+        value: INFO
+      - key: TRACE_BACKEND
+        value: redis
+      - key: RATE_LIMIT_BACKEND
+        value: redis
+      - key: AUTH_ENABLED
+        value: "true"
+      - key: API_KEYS
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: agentops-redis
+          property: connectionString
+
+  - type: redis
+    name: agentops-redis
+    plan: free
+    ipAllowList: []

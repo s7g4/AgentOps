@@ -8,15 +8,33 @@ services:
     environment:
       HOST: "0.0.0.0"
       PORT: "8000"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      REDIS_URL: redis://redis:6379/0
+      TRACE_BACKEND: ${TRACE_BACKEND:-redis}
+      RATE_LIMIT_BACKEND: ${RATE_LIMIT_BACKEND:-redis}
+      AUTH_ENABLED: ${AUTH_ENABLED:-false}
+      API_KEYS: ${API_KEYS:-}
     depends_on:
       redis:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    # Not published to the host — reachable only from the agentops
+    # service on the compose network. Publish it yourself if you need
+    # host-level access (e.g. for `redis-cli`), but there's no reason a
+    # deployed AgentOps instance needs Redis reachable from outside.
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
+
+volumes:
+  redis_data:
