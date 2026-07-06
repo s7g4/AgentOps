@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from threading import RLock
-from typing import Protocol, runtime_checkable
+from typing import Protocol, cast, runtime_checkable
 
 from app.schemas.trace import Trace
 
@@ -23,8 +23,9 @@ class TraceStoreProtocol(Protocol):
 class TraceStore:
     """Thread-safe, in-memory async trace store.
 
-    Uses a sync RLock (not asyncio.Lock) because it also supports the legacy
-    sync runtime that V1 tests instantiate directly.
+    Uses a sync RLock (not asyncio.Lock) so it stays safe to call from a
+    thread-pool context (e.g. asyncio.to_thread) in addition to the event
+    loop, without pulling in an event-loop-bound primitive.
 
     Evicts the oldest entry when ``_MAX_TRACES`` is reached, preventing
     unbounded memory growth in long-running processes.
@@ -55,27 +56,6 @@ class TraceStore:
             return all_traces[offset : offset + limit]
 
     async def count(self) -> int:
-        with self._lock:
-            return len(self._traces)
-
-    # Synchronous accessors kept for backward-compat with V1 tests.
-    def put_sync(self, trace: Trace) -> None:
-        with self._lock:
-            if len(self._traces) >= _MAX_TRACES:
-                oldest = next(iter(self._traces))
-                del self._traces[oldest]
-            self._traces[trace.trace_id] = trace
-
-    def get_sync(self, trace_id: str) -> Trace | None:
-        with self._lock:
-            return self._traces.get(trace_id)
-
-    def list_sync(self, limit: int = 100, offset: int = 0) -> list[Trace]:
-        with self._lock:
-            all_traces = list(reversed(list(self._traces.values())))
-            return all_traces[offset : offset + limit]
-
-    def count_sync(self) -> int:
         with self._lock:
             return len(self._traces)
 
@@ -132,9 +112,12 @@ class RedisTraceStore:
 
     async def list_traces(self, limit: int = 100, offset: int = 0) -> list[Trace]:
         """Return traces ordered by insertion time, most recent first."""
-        # ZREVRANGEBYSCORE for newest-first ordering.
-        ids: list[str] = await self._redis.zrevrange(
-            self._INDEX_KEY, offset, offset + limit - 1
+        # ZREVRANGEBYSCORE for newest-first ordering. decode_responses=True
+        # guarantees str members at runtime; cast because the stub types
+        # zrevrange's return generically (withscores can change the shape).
+        ids = cast(
+            "list[str]",
+            await self._redis.zrevrange(self._INDEX_KEY, offset, offset + limit - 1),
         )
         if not ids:
             return []
@@ -156,4 +139,4 @@ class RedisTraceStore:
             return False
 
     async def close(self) -> None:
-        await self._redis.close()
+        await self._redis.aclose()

@@ -11,7 +11,7 @@ from app.config.settings import Settings, override_settings
 
 @pytest.fixture()
 def client() -> TestClient:
-    override_settings(Settings())
+    override_settings(Settings(redis_url=None))
     app = create_app()
     with TestClient(app) as c:
         yield c

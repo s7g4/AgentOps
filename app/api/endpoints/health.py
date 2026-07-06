@@ -13,7 +13,7 @@ Response shape
 ──────────────
 {
   "status": "ok" | "degraded" | "down",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "checks": {
     "redis":    "ok" | "error" | "not_configured",
     "openai":   "configured" | "not_configured",
@@ -30,6 +30,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from app import __version__
 from app.config.settings import load_settings
 
 health_router = APIRouter(tags=["health"])
@@ -48,7 +49,7 @@ async def health() -> JSONResponse:
 
             r = aioredis.from_url(settings.redis_url, socket_connect_timeout=2)
             await r.ping()
-            await r.close()
+            await r.aclose()
             checks["redis"] = "ok"
         except Exception:  # noqa: BLE001
             checks["redis"] = "error"
@@ -62,5 +63,5 @@ async def health() -> JSONResponse:
     status_code = 503 if overall == "down" else 200
     return JSONResponse(
         status_code=status_code,
-        content={"status": overall, "version": "2.0.0", "checks": checks},
+        content={"status": overall, "version": __version__, "checks": checks},
     )

@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import time
 from threading import RLock
-from typing import Protocol, runtime_checkable
+from typing import Protocol, cast, runtime_checkable
 
 from app.messaging.message import RoutingResult, SubTaskResult
 
@@ -113,7 +113,12 @@ class RedisRoutingStore:
         )
 
     async def list(self, limit: int = 20, offset: int = 0) -> list[RoutingResult]:
-        ids: list[str] = await self._redis.zrevrange(self._INDEX, offset, offset + limit - 1)
+        # decode_responses=True guarantees str members at runtime; the redis-py
+        # stubs type zrevrange's return generically because withscores can
+        # change the shape.
+        ids = cast(
+            "list[str]", await self._redis.zrevrange(self._INDEX, offset, offset + limit - 1)
+        )
         if not ids:
             return []
 
@@ -151,4 +156,4 @@ class RedisRoutingStore:
         return await self._redis.zcard(self._INDEX)
 
     async def close(self) -> None:
-        await self._redis.close()
+        await self._redis.aclose()

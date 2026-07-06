@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import time
 from threading import RLock
-from typing import Protocol, runtime_checkable
+from typing import Protocol, cast, runtime_checkable
 
 from app.workflows.definition import WorkflowDefinition
 from app.workflows.execution import WorkflowExecution
@@ -160,7 +160,13 @@ class RedisWorkflowStore:
         return WorkflowDefinition.from_dict(json.loads(raw))
 
     async def list_definitions(self, limit: int = 20, offset: int = 0) -> list[WorkflowDefinition]:
-        ids: list[str] = await self._redis.zrevrange(self._WF_INDEX, offset, offset + limit - 1)
+        # decode_responses=True guarantees str members at runtime; cast because
+        # the stub types zrevrange's return generically (withscores can change
+        # the shape).
+        ids = cast(
+            "list[str]",
+            await self._redis.zrevrange(self._WF_INDEX, offset, offset + limit - 1),
+        )
         if not ids:
             return []
         keys = [f"{self._WF_PREFIX}{i}" for i in ids]
@@ -201,7 +207,7 @@ class RedisWorkflowStore:
         self, wf_id: str, limit: int = 20, offset: int = 0
     ) -> list[WorkflowExecution]:
         index_key = f"{self._EX_INDEX_PREFIX}{wf_id}"
-        ids: list[str] = await self._redis.zrevrange(index_key, offset, offset + limit - 1)
+        ids = cast("list[str]", await self._redis.zrevrange(index_key, offset, offset + limit - 1))
         if not ids:
             return []
         keys = [f"{self._EX_PREFIX}{i}" for i in ids]
@@ -212,4 +218,4 @@ class RedisWorkflowStore:
         return await self._redis.zcard(f"{self._EX_INDEX_PREFIX}{wf_id}")
 
     async def close(self) -> None:
-        await self._redis.close()
+        await self._redis.aclose()
