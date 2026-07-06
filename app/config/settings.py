@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,15 +32,44 @@ class Settings(BaseSettings):
     # Trace backend: "memory" for tests/local, "redis" for production.
     trace_backend: Literal["memory", "redis"] = "memory"
 
+    # Rate limiting backend: "memory" is correct for a single process; use
+    # "redis" the moment more than one replica sits behind the same host,
+    # otherwise each replica enforces its own independent limit.
+    rate_limit_backend: Literal["memory", "redis"] = "memory"
+
     # Auth — disabled by default for local dev; always enable in production.
+    # API_KEYS accepts a comma-separated list so multiple callers (or a key
+    # rotation in progress) can each hold a distinct, individually revocable
+    # credential. API_KEY is kept as a single-key fallback for callers who
+    # haven't migrated yet — both are folded into one set at validation time.
     auth_enabled: bool = False
     api_key: str | None = Field(default=None, repr=False)
+    api_keys: str = Field(default="", repr=False)
 
     # OpenTelemetry — disabled by default; opt-in for production observability.
     # When enabled, traces are exported to the configured OTLP gRPC endpoint.
     otel_enabled: bool = False
     otel_endpoint: str = "http://localhost:4317"
     otel_service_name: str = "agentops"
+
+    @field_validator("api_keys", mode="before")
+    @classmethod
+    def _normalise_api_keys(cls, v: object) -> str:
+        return "" if v is None else str(v)
+
+    def valid_api_keys(self) -> frozenset[str]:
+        """Return every configured API key as a single set.
+
+        Merges the legacy single ``api_key`` with the comma-separated
+        ``api_keys`` list, stripping whitespace and dropping empties so a
+        trailing comma or blank env var doesn't produce a key that matches
+        an empty ``X-Api-Key`` header.
+        """
+        keys = {k.strip() for k in self.api_keys.split(",") if k.strip()}
+        if self.api_key:
+            keys.add(self.api_key)
+        return frozenset(keys)
+
 
 _settings: Settings | None = None
 
