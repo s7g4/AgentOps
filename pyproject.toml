@@ -46,6 +46,13 @@ otel = [
 [tool.uv]
 # uv can install deps from this file; no additional config needed.
 
+[tool.setuptools.packages.find]
+# client/ is a sibling installable package (its own pyproject.toml), not
+# part of this distribution — without this, setuptools' flat-layout
+# auto-discovery sees both app/ and client/ as top-level packages and
+# refuses to build.
+include = ["app*"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
