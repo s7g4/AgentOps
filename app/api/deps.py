@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from app.agents.builtin import EchoAgent, SummaryAgent
 from app.agents.classifier.classifier_agent import ClassifierAgent
+from app.agents.pipeline_agent import PipelineAgent
 from app.agents.planner.planner_agent import PlannerAgent
 from app.agents.registry import AgentRegistry
 from app.agents.response_generator.response_generator_agent import ResponseGeneratorAgent
@@ -98,8 +100,18 @@ def get_decomposition_provider() -> DecompositionProvider:
 
 @lru_cache(maxsize=1)
 def get_agent_registry() -> AgentRegistry:
-    """Return the default AgentRegistry pre-loaded with built-in agents."""
-    return AgentRegistry.default()
+    """Return the AgentRegistry pre-loaded with built-in agents.
+
+    Registers the demo agents (echo, summary) plus PipelineAgent, which
+    wraps the DI-wired AgentOpsRuntime singleton so the classify/plan/
+    execute/verify/respond pipeline is reachable from workflow agent-steps
+    and supervisor subtasks under the name "support_pipeline".
+    """
+    registry = AgentRegistry()
+    registry.register(EchoAgent())
+    registry.register(SummaryAgent())
+    registry.register(PipelineAgent(get_runtime()))
+    return registry
 
 
 @lru_cache(maxsize=1)
