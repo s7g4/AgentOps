@@ -14,6 +14,7 @@ Set these before exposing the service publicly:
 | `TRACE_BACKEND` | `redis` | In-memory traces vanish on restart and don't share across replicas. |
 | `RATE_LIMIT_BACKEND` | `redis` | Same reasoning — in-memory only rate-limits per replica. |
 | `OPENAI_API_KEY` | your key, if you want LLM-backed classification/planning/decomposition | Optional — deterministic providers work with no key at all. |
+| `TRUST_PROXY_HEADERS` | `true`, **only** if you put a reverse proxy (Caddy, nginx, your platform's load balancer) in front | Enables reading the real client IP from `X-Forwarded-For` for rate limiting and logging. Leave `false` if the app is reachable directly — otherwise a caller can reset their own rate-limit bucket by sending a fresh spoofed header on every request. |
 
 Everything else (`HOST`, `PORT`, `LOG_LEVEL`, `OTEL_*`) has a sane default; see the config table in [README.md](README.md).
 

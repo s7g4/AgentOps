@@ -46,6 +46,15 @@ class Settings(BaseSettings):
     api_key: str | None = Field(default=None, repr=False)
     api_keys: str = Field(default="", repr=False)
 
+    # X-Forwarded-For is client-supplied and trivially spoofable. Disabled by
+    # default so rate-limit keys and logged client IPs fall back to the
+    # socket peer address — correct when the app is reachable directly.
+    # Enable only when a trusted reverse proxy (Caddy, nginx, a platform LB)
+    # sits in front and appends the real client IP as the *last* hop; the
+    # app then reads that trailing entry instead of the attacker-controllable
+    # leading one.
+    trust_proxy_headers: bool = False
+
     # OpenTelemetry — disabled by default; opt-in for production observability.
     # When enabled, traces are exported to the configured OTLP gRPC endpoint.
     otel_enabled: bool = False

@@ -209,6 +209,12 @@ Every `/messages` request produces a structured `Trace` in `TraceStore`: state t
 
 `APIKeyMiddleware` validates the `X-Api-Key` header when `AUTH_ENABLED=true`, against every key in `Settings.valid_api_keys()` (the union of `API_KEYS`, comma-separated, and the legacy single `API_KEY`). Comparison uses `hmac.compare_digest` against every configured key — not just the first — so response timing doesn't leak how many keys exist or which one matched. This is deliberately simpler than JWT/OAuth: there's no session or logged-in user, just a caller presenting a shared secret, so there's no expiry or refresh flow to build or operate.
 
+Only `/health` and `/metrics` bypass auth (liveness probes and scrapers need to run with no credentials). `/docs`, `/redoc`, and `/openapi.json` do **not** bypass it — once auth is enabled, the API schema itself requires a key too.
+
+### Client IP and `X-Forwarded-For`
+
+Both the auth middleware (for the `client` field on rejected-request log lines) and the rate limiter (for the bucket key) need a caller IP. `X-Forwarded-For` is a client-supplied header — trusting it unconditionally lets a caller reset their own rate-limit bucket by sending a fresh spoofed value on every request. It's only honored when `Settings.trust_proxy_headers` is `true`, and even then the *last* entry is used (the hop a well-behaved reverse proxy appends), not the first (the hop a client controls). By default (`trust_proxy_headers=false`), both fall back to `request.client.host`, the actual socket peer address — correct when the app is reachable directly, which is the safe assumption absent an explicit opt-in.
+
 ---
 
 ## Dependency Injection

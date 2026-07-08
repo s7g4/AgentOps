@@ -243,7 +243,8 @@ async def run_workflow(
     try:
         result = await executor.run(wf, execution)
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("workflow_run_failed", extra={"workflow_id": workflow_id})
+        raise HTTPException(status_code=500, detail="Workflow run failed.") from exc
 
     return _to_execution_response(result)
 

@@ -1,0 +1,54 @@
+site_name: AgentOps
+site_description: A multi-agent orchestration backend — FSM pipeline, DAG workflow engine, and agent bus on one substrate.
+site_url: https://s7g4.github.io/AgentOps/
+repo_url: https://github.com/s7g4/AgentOps
+repo_name: s7g4/AgentOps
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - content.code.copy
+    - content.action.edit
+
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - include-markdown
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Architecture: architecture.md
+  - API Reference: api-reference.md
+  - Observability: observability.md
+  - Deployment: deployment.md
+  - Load Testing: load-testing.md
+  - Design Decisions: design-decisions.md
+  - Contributing: contributing.md
+  - Security: security.md
+  - Changelog: changelog.md

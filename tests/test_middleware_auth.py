@@ -53,6 +53,14 @@ def test_open_paths_bypass_auth(auth_client: TestClient) -> None:
     assert auth_client.get("/metrics").status_code == 200
 
 
+def test_docs_and_openapi_require_auth(auth_client: TestClient) -> None:
+    """Regression test: the API schema shouldn't be handed out for free to
+    an unauthenticated caller once auth is enabled."""
+    assert auth_client.get("/docs").status_code == 401
+    assert auth_client.get("/openapi.json").status_code == 401
+    assert auth_client.get("/docs", headers={"X-Api-Key": "key-one"}).status_code == 200
+
+
 def test_legacy_single_api_key_still_works() -> None:
     override_settings(Settings(auth_enabled=True, api_key="legacy-secret", trace_backend="memory"))
     try:

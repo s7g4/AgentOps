@@ -94,6 +94,7 @@ See [client/README.md](client/README.md) for the full command reference, and [ex
 | `API_KEY` | — | Single-key fallback, folded into `API_KEYS` |
 | `OTEL_ENABLED` | `false` | Export spans to an OTLP collector |
 | `OTEL_ENDPOINT` | `http://localhost:4317` | OTLP gRPC endpoint |
+| `TRUST_PROXY_HEADERS` | `false` | Honor `X-Forwarded-For` for rate-limit keys and logged client IPs. Only enable behind a trusted reverse proxy — see [DEPLOYMENT.md](DEPLOYMENT.md). |
 
 `memory` backends are correct for a single process. The moment more than one replica sits behind the same host, set `REDIS_URL` and switch `TRACE_BACKEND`/`RATE_LIMIT_BACKEND` to `redis` — otherwise each replica keeps its own traces, workflow state, and rate-limit counters.
 
@@ -195,6 +196,8 @@ mypy app                                        # type check
 
 CI runs against a real `redis:7-alpine` service container, so the Redis-backed stores and rate limiter get exercised on every push, not just mocked.
 
+For load testing all three entry points, see [`locustfile.py`](locustfile.py) and [docs/load-testing.md](docs/load-testing.md).
+
 ---
 
 ## Design Notes
@@ -208,4 +211,6 @@ CI runs against a real `redis:7-alpine` service container, so the Redis-backed s
 - **Rate limiting** — in-memory sliding window by default; `RATE_LIMIT_BACKEND=redis` switches to a shared fixed-window counter so every replica agrees on the limit.
 - **Retry logic** — tool execution uses `tenacity` with exponential backoff. Configurable per-tool.
 
-See [docs/architecture.md](docs/architecture.md) for the full component map and request lifecycles, [DEPLOYMENT.md](DEPLOYMENT.md) for running this somewhere other than your laptop, and [CHANGELOG.md](CHANGELOG.md) for release history. Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md); security issues go through [SECURITY.md](SECURITY.md), not a public issue.
+See [docs/architecture.md](docs/architecture.md) for the full component map and request lifecycles, [docs/design-decisions.md](docs/design-decisions.md) for the reasoning behind the three-entry-point shape, [DEPLOYMENT.md](DEPLOYMENT.md) for running this somewhere other than your laptop, and [CHANGELOG.md](CHANGELOG.md) for release history. Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md); security issues go through [SECURITY.md](SECURITY.md), not a public issue.
+
+The full docs site (`mkdocs.yml`) builds with `pip install -e ".[docs]" && mkdocs serve`.

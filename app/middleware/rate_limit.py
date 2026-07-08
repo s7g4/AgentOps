@@ -28,7 +28,14 @@ trip per request — no Lua script, no read-modify-write — and it's shared
 across every replica, which is the property that actually matters once you
 have more than one process answering requests.
 
-Rate limit key: client IP address (``X-Forwarded-For`` → ``request.client.host``).
+Rate limit key: client IP address. ``X-Forwarded-For`` is only honored when
+``trust_proxy_headers=True`` (see ``Settings.trust_proxy_headers``) — it's a
+client-supplied header, so trusting it unconditionally lets a caller reset
+their own bucket on every request by sending a fresh value. When trusted, the
+*last* entry is used (the hop a well-behaved reverse proxy appends), not the
+first (the hop a client controls). Otherwise the key falls back to
+``request.client.host``, the actual socket peer address.
+
 For customer-level rate limiting, the key should be ``customer_id`` from the
 request body — this is done in the ``/messages`` endpoint handler directly.
 """
@@ -132,10 +139,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         app: object,
         config: RateLimitConfig | None = None,
         limiter: RateLimiter | None = None,
+        trust_proxy_headers: bool = False,
     ) -> None:
         super().__init__(app)  # type: ignore[arg-type]
         self.config = config or RateLimitConfig()
         self.limiter = limiter or InMemoryRateLimiter()
+        self.trust_proxy_headers = trust_proxy_headers
 
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -162,10 +171,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
     def _get_key(self, request: Request) -> str:
-        # Respect X-Forwarded-For if behind a proxy.
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            return forwarded_for.split(",")[0].strip()
+        if self.trust_proxy_headers:
+            forwarded_for = request.headers.get("X-Forwarded-For")
+            if forwarded_for:
+                # Last entry is the hop the (trusted) proxy appended; earlier
+                # entries are attacker-controllable.
+                return forwarded_for.split(",")[-1].strip()
         if request.client:
             return request.client.host
         return "unknown"

@@ -17,7 +17,9 @@ from app.middleware.rate_limit import (
 )
 
 
-def _make_app(config: RateLimitConfig, limiter=None) -> FastAPI:  # noqa: ANN001
+def _make_app(
+    config: RateLimitConfig, limiter=None, trust_proxy_headers: bool = False  # noqa: ANN001
+) -> FastAPI:
     app = FastAPI()
 
     @app.get("/ping")
@@ -28,7 +30,12 @@ def _make_app(config: RateLimitConfig, limiter=None) -> FastAPI:  # noqa: ANN001
     def health() -> dict[str, bool]:
         return {"ok": True}
 
-    app.add_middleware(RateLimitMiddleware, config=config, limiter=limiter)
+    app.add_middleware(
+        RateLimitMiddleware,
+        config=config,
+        limiter=limiter,
+        trust_proxy_headers=trust_proxy_headers,
+    )
     return app
 
 
@@ -97,12 +104,44 @@ def test_middleware_exempts_health_and_metrics() -> None:
             assert client.get("/health").status_code == 200
 
 
-def test_middleware_keys_by_x_forwarded_for() -> None:
-    app = _make_app(RateLimitConfig(requests_per_window=1, window_seconds=60))
+def test_middleware_keys_by_x_forwarded_for_when_trusted() -> None:
+    """Only honor X-Forwarded-For when the deployment has opted in via
+    trust_proxy_headers=True (i.e. a reverse proxy sits in front)."""
+    app = _make_app(
+        RateLimitConfig(requests_per_window=1, window_seconds=60), trust_proxy_headers=True
+    )
     with TestClient(app) as client:
         assert client.get("/ping", headers={"X-Forwarded-For": "1.1.1.1"}).status_code == 200
         assert client.get("/ping", headers={"X-Forwarded-For": "2.2.2.2"}).status_code == 200
         assert client.get("/ping", headers={"X-Forwarded-For": "1.1.1.1"}).status_code == 429
+
+
+def test_middleware_uses_rightmost_forwarded_hop_when_trusted() -> None:
+    """The leftmost X-Forwarded-For entry is attacker-controllable; a
+    well-behaved proxy appends the real client IP as the last hop."""
+    app = _make_app(
+        RateLimitConfig(requests_per_window=1, window_seconds=60), trust_proxy_headers=True
+    )
+    with TestClient(app) as client:
+        assert (
+            client.get("/ping", headers={"X-Forwarded-For": "spoofed, 9.9.9.9"}).status_code
+            == 200
+        )
+        # Same real (rightmost) hop, different spoofed prefix — still one bucket.
+        assert (
+            client.get("/ping", headers={"X-Forwarded-For": "other-spoof, 9.9.9.9"}).status_code
+            == 429
+        )
+
+
+def test_middleware_ignores_x_forwarded_for_by_default() -> None:
+    """Regression test: without trust_proxy_headers, a caller can't reset
+    their own rate-limit bucket by sending a fresh spoofed X-Forwarded-For
+    on every request — the key falls back to the socket peer address."""
+    app = _make_app(RateLimitConfig(requests_per_window=1, window_seconds=60))
+    with TestClient(app) as client:
+        assert client.get("/ping", headers={"X-Forwarded-For": "1.1.1.1"}).status_code == 200
+        assert client.get("/ping", headers={"X-Forwarded-For": "2.2.2.2"}).status_code == 429
 
 
 # ── Redis limiter ──────────────────────────────────────────────────────────────

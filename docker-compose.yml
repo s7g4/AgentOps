@@ -11,10 +11,17 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       REDIS_URL: redis://redis:6379/0
-      TRACE_BACKEND: ${TRACE_BACKEND:-redis}
-      RATE_LIMIT_BACKEND: ${RATE_LIMIT_BACKEND:-redis}
+      # Hardcoded, not `${TRACE_BACKEND:-redis}` — Redis is always present in
+      # this topology, and .env.example (meant for bare local dev without
+      # Redis running) sets both to `memory`. Docker Compose substitutes
+      # variables from the host's .env file, so `${VAR:-redis}` would
+      # silently pick up that `memory` default and traces/rate limits
+      # wouldn't survive an app-container restart as documented.
+      TRACE_BACKEND: redis
+      RATE_LIMIT_BACKEND: redis
       AUTH_ENABLED: ${AUTH_ENABLED:-false}
       API_KEYS: ${API_KEYS:-}
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
     depends_on:
       redis:
         condition: service_healthy

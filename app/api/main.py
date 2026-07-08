@@ -95,6 +95,7 @@ def create_app() -> FastAPI:
         RateLimitMiddleware,
         config=RateLimitConfig(requests_per_window=200, window_seconds=60),
         limiter=get_rate_limiter(),
+        trust_proxy_headers=settings.trust_proxy_headers,
     )
 
     app.include_router(router)

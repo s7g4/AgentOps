@@ -11,6 +11,9 @@ classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.12",
   "Framework :: FastAPI",
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Libraries :: Application Frameworks",
 ]
 
 dependencies = [
@@ -28,6 +31,12 @@ dependencies = [
   "anyio[trio]>=4.0.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/s7g4/AgentOps"
+Repository = "https://github.com/s7g4/AgentOps"
+Issues = "https://github.com/s7g4/AgentOps/issues"
+Changelog = "https://github.com/s7g4/AgentOps/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3.0",
@@ -40,6 +49,14 @@ otel = [
   "opentelemetry-sdk>=1.26.0",
   "opentelemetry-exporter-otlp-proto-grpc>=1.26.0",
   "opentelemetry-instrumentation-fastapi>=0.47b0",
+]
+docs = [
+  "mkdocs>=1.6.0",
+  "mkdocs-material>=9.5.0",
+  "mkdocs-include-markdown-plugin>=6.2.0",
+]
+loadtest = [
+  "locust>=2.29.0",
 ]
 
 

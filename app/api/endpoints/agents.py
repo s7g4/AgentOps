@@ -22,6 +22,7 @@ Design decisions
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Annotated
 
@@ -42,6 +43,7 @@ from app.schemas.routing import (
 )
 
 agents_router = APIRouter(prefix="/agents", tags=["agents"])
+logger = logging.getLogger(__name__)
 
 
 def _to_routing_response(result: RoutingResult) -> RoutingResponse:
@@ -112,7 +114,8 @@ async def route(
     try:
         result = await supervisor.route(goal=body.goal, subtasks=subtasks)
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("agent_routing_failed", extra={"goal": body.goal})
+        raise HTTPException(status_code=500, detail="Routing failed.") from exc
 
     return _to_routing_response(result)
 

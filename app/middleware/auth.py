@@ -23,6 +23,9 @@ can run locally without configuration.  In any production deployment,
 
 Excluded paths (``/health``, ``/metrics``) are always unauthenticated so
 Kubernetes liveness probes and Prometheus scrapers don't need credentials.
+``/docs``, ``/redoc``, and ``/openapi.json`` are *not* excluded — once auth is
+enabled, the API surface itself shouldn't be handed out for free to an
+unauthenticated caller.
 
 Why middleware over FastAPI Depends?
 ── Middleware catches ALL routes including ones added by third-party routers.
@@ -46,7 +49,7 @@ from app.exceptions import ConfigurationError
 logger = logging.getLogger(__name__)
 
 # Paths that bypass authentication — health checks and metrics scrapers.
-_OPEN_PATHS: frozenset[str] = frozenset({"/health", "/metrics", "/docs", "/openapi.json"})
+_OPEN_PATHS: frozenset[str] = frozenset({"/health", "/metrics"})
 
 
 def _matches_any(provided: str, keys: frozenset[str]) -> bool:
@@ -89,7 +92,10 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         if not provided or not _matches_any(provided, valid_keys):
             logger.warning(
                 "auth_rejected",
-                extra={"path": request.url.path, "client": _client_ip(request)},
+                extra={
+                    "path": request.url.path,
+                    "client": _client_ip(request, trust_proxy_headers=settings.trust_proxy_headers),
+                },
             )
             return JSONResponse(
                 status_code=401,
@@ -100,8 +106,11 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-def _client_ip(request: Request) -> str:
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
+def _client_ip(request: Request, *, trust_proxy_headers: bool) -> str:
+    if trust_proxy_headers:
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            # Last entry is the hop a trusted proxy appended; earlier
+            # entries are attacker-controllable (see rate_limit.py).
+            return forwarded_for.split(",")[-1].strip()
     return request.client.host if request.client else "unknown"

@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- `TRUST_PROXY_HEADERS` setting (default `false`): gates whether the rate limiter and auth-rejection logging honor `X-Forwarded-For`. When enabled, the *last* hop is used instead of the first.
+- `mkdocs.yml` and a full `docs/` site (mkdocs-material) covering architecture, API reference, observability, deployment, load testing, and design decisions.
+- `locustfile.py` load-testing `/messages`, `/workflows/{id}/run`, and `/agents/route`.
+- `project.urls` in `pyproject.toml` (homepage, repository, issues, changelog).
+
+### Fixed
+
+- Rate-limit and auth-log client-IP resolution no longer trusts `X-Forwarded-For` by default — the header is client-supplied, and trusting it unconditionally let a caller reset their own rate-limit bucket by sending a fresh spoofed value on every request.
+- `/docs`, `/redoc`, and `/openapi.json` now require auth when `AUTH_ENABLED=true` (previously excluded alongside `/health`/`/metrics` with no stated rationale).
+- `POST /agents/route` and `POST /workflows/{id}/run` no longer leak raw internal exception text (`str(exc)`) in the `500` response body; the exception is logged server-side and a generic message is returned instead.
+- `docker-compose.yml` now hardcodes `TRACE_BACKEND`/`RATE_LIMIT_BACKEND` to `redis` instead of `${VAR:-redis}`. Docker Compose substitutes those from the host's `.env` file, and `.env.example` — which the README/DEPLOYMENT.md quickstart tells you to `cp` before `docker compose up` — sets both to `memory`, so traces and rate limits silently did not survive an app-container restart as documented. Verified end to end after the fix.
+
 ## [1.0.0]
 
 The three orchestration systems built in 0.x (FSM pipeline, workflow engine, agent bus) are now one substrate instead of three silos, and the gaps a production deployment would actually hit — untested Redis persistence, single-key auth, a rate limiter that only works on one replica, no client — are closed.
