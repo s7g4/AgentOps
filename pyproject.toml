@@ -1,5 +1,5 @@
 [project]
-name = "agentops"
+name = "s7g4-agentops"
 version = "1.0.0"
 description = "Multi-agent orchestration backend — FSM pipeline, workflow engine, and agent bus on one substrate"
 readme = "README.md"
