@@ -1,5 +1,10 @@
 # ─── Stage 1: Builder ─────────────────────────────────────────────────────────
-FROM python:3.12-slim AS builder
+# Pinned to a specific patch version + digest, not the floating `3.12-slim`
+# tag — rebuilds on different days previously could silently pull different
+# underlying images. To bump: `docker pull python:3.12-slim`, take the new
+# digest from the pull output, update both FROM lines below (build stage and
+# runtime stage — they must match), and confirm `docker build .` still works.
+FROM python:3.12.13-slim@sha256:64695412729fbe8cf054511723820c82bbe5a077d4a6b4070cd4a7225d3422ce AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -17,7 +22,7 @@ RUN uv pip install --system .
 
 
 # ─── Stage 2: Runtime ─────────────────────────────────────────────────────────
-FROM python:3.12-slim AS runtime
+FROM python:3.12.13-slim@sha256:64695412729fbe8cf054511723820c82bbe5a077d4a6b4070cd4a7225d3422ce AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
