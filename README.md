@@ -5,6 +5,10 @@ A multi-agent orchestration backend built on FastAPI. Three ways to run work thr
 [![CI](https://github.com/s7g4/AgentOps/actions/workflows/ci.yml/badge.svg)](https://github.com/s7g4/AgentOps/actions/workflows/ci.yml)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-s7g4.github.io%2FAgentOps-blue)](https://s7g4.github.io/AgentOps/)
+[![PyPI](https://img.shields.io/badge/pypi-s7g4--agentops-blue)](https://pypi.org/project/s7g4-agentops/)
+
+**[Read the full docs →](https://s7g4.github.io/AgentOps/)**
 
 ---
 
