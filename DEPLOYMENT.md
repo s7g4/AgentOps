@@ -16,7 +16,7 @@ Set these before exposing the service publicly:
 | `OPENAI_API_KEY` | your key, if you want LLM-backed classification/planning/decomposition | Optional — deterministic providers work with no key at all. |
 | `TRUST_PROXY_HEADERS` | `true`, **only** if you put a reverse proxy (Caddy, nginx, your platform's load balancer) in front | Enables reading the real client IP from `X-Forwarded-For` for rate limiting and logging. Leave `false` if the app is reachable directly — otherwise a caller can reset their own rate-limit bucket by sending a fresh spoofed header on every request. |
 
-Everything else (`HOST`, `PORT`, `LOG_LEVEL`, `OTEL_*`) has a sane default; see the config table in [README.md](README.md).
+Everything else (`HOST`, `PORT`, `LOG_LEVEL`, `OTEL_*`) has a sane default; see the config table in [README.md](https://github.com/s7g4/AgentOps/blob/main/README.md).
 
 `GET /health` is what your platform's health check / readiness probe should hit — it reports Redis and OpenAI connectivity, not just process liveness.
 
