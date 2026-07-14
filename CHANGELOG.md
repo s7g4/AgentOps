@@ -4,6 +4,11 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+### Added
+
+- `pip-audit` dependency-vulnerability scanning in CI, for both the root package and `client/` (each as a gating step — a real fail, not just a report).
+- A dedicated CI job for `client/`'s own lint/type-check/test suite. It previously ran locally only — 19 tests were never exercised in CI.
+
 ### Fixed
 
 - `RedisRoutingStore`'s Redis connection was never closed on shutdown — it's created via the same `get_routing_store()` the supervisor uses, but was never bound to `app.state` nor included in the shutdown-close loop in `app/api/main.py`. Now bound and closed like every other store.

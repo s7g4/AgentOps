@@ -44,6 +44,7 @@ dev = [
   "pytest-cov>=5.0.0",
   "ruff>=0.6.0",
   "mypy>=1.10.0",
+  "pip-audit>=2.7.0",
 ]
 otel = [
   "opentelemetry-sdk>=1.26.0",
