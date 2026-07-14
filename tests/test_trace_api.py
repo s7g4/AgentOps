@@ -66,3 +66,16 @@ def test_list_traces_limit_respected() -> None:
         assert list_r.status_code == 200
         data = list_r.json()
         assert len(data["traces"]) == 1
+
+
+def test_list_traces_rejects_invalid_pagination_params() -> None:
+    """Regression test: limit/offset previously accepted any int (including
+    negative values) with a silent min(limit, 200) clamp and no lower-bound
+    check — now validated declaratively like GET /workflows and GET
+    /agents/routes, so out-of-range values are a 422, not silently clamped."""
+    with TestClient(app) as client:
+        assert client.get("/trace/?limit=0").status_code == 422
+        assert client.get("/trace/?limit=201").status_code == 422
+        assert client.get("/trace/?limit=-5").status_code == 422
+        assert client.get("/trace/?offset=-1").status_code == 422
+        assert client.get("/trace/?limit=200&offset=0").status_code == 200

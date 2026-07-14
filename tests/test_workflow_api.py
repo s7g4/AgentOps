@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from http import HTTPStatus
 
 import pytest
 from fastapi.testclient import TestClient
@@ -58,6 +59,18 @@ def test_create_workflow_with_cycle_returns_422(client: TestClient) -> None:
     # which is correct: bad input is rejected before cycle check.
     r = client.post("/workflows", json=cyclic)
     assert r.status_code == 422
+    # Regression test: this specific error path (a raw ValueError raised
+    # inside WorkflowStepSchema's model_validator) embeds the exception
+    # object itself in Pydantic's error "ctx", which isn't plain-JSON-safe —
+    # the global RequestValidationError handler must run it through
+    # jsonable_encoder, not a bare json.dumps, or this 500s instead of 422s.
+    body = r.json()
+    # The exact reason phrase for 422 changed between Python versions (RFC
+    # 9110 renamed it from "Unprocessable Entity" to "Unprocessable
+    # Content") — compute it the same way the handler does rather than
+    # hardcoding a version-specific string here.
+    assert body["error"] == HTTPStatus(422).phrase
+    assert isinstance(body["detail"], list)
 
 
 def test_create_workflow_with_dag_cycle_returns_422(client: TestClient) -> None:

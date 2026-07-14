@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException, Request
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.runtime.trace_store import TraceStore
@@ -20,8 +22,8 @@ async def get_trace(trace_id: str, request: Request) -> dict[str, object]:
 @trace_router.get("/")
 async def list_traces(
     request: Request,
-    limit: int = 50,
-    offset: int = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> JSONResponse:
     """List recent traces with pagination.
 
@@ -30,7 +32,6 @@ async def list_traces(
       offset — skip N most-recent traces (for pagination)
     """
     store: TraceStore = request.app.state.trace_store
-    limit = min(limit, 200)
     traces = await store.list_traces(limit=limit, offset=offset)
     total = await store.count()
     return JSONResponse(
