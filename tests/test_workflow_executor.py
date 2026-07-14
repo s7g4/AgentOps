@@ -4,13 +4,28 @@ from __future__ import annotations
 
 import asyncio
 
+from app.agents.base import RoutableAgent
 from app.agents.registry import AgentRegistry
 from app.messaging.bus import AgentBus
+from app.messaging.message import AgentMessage
 from app.registry.tool_registry import ToolRegistry
 from app.workflows.definition import WorkflowDefinition, WorkflowStep
 from app.workflows.execution import StepStatus, WorkflowExecution, WorkflowStatus
 from app.workflows.executor import AsyncWorkflowExecutor
 from app.workflows.store import InMemoryWorkflowStore
+
+
+class _CrashingAgent(RoutableAgent):
+    """Raises a plain RuntimeError — not an AgentOpsError subclass — to
+    verify _execute_step()'s except Exception wraps arbitrary exception
+    types from a dispatched agent, not just the domain ones (unknown
+    agent name, missing bus) already exercised elsewhere in this file."""
+
+    name = "crashing_agent"
+    description = "Always raises RuntimeError."
+
+    async def handle(self, message: AgentMessage) -> AgentMessage:
+        raise RuntimeError("boom: unexpected failure")
 
 
 def _make_executor() -> tuple[AsyncWorkflowExecutor, InMemoryWorkflowStore]:
@@ -258,4 +273,29 @@ def test_agent_step_unknown_agent_name_fails() -> None:
 
     assert result.status == WorkflowStatus.FAILED
     assert result.step_results["missing"].status == StepStatus.FAILED
+
+
+def test_agent_step_non_agentops_error_is_caught_and_wrapped_not_raised() -> None:
+    """Regression test: a plain RuntimeError from a real dispatched agent
+    (as opposed to AgentNotFoundError from an unknown name, or
+    WorkflowExecutionError from a missing bus) must be caught and recorded
+    as a FAILED step, not propagate out of executor.run()."""
+    registry = AgentRegistry()
+    registry.register(_CrashingAgent())
+    store = InMemoryWorkflowStore()
+    executor = AsyncWorkflowExecutor(
+        tool_registry=ToolRegistry.default(),
+        store=store,
+        agent_bus=AgentBus(),
+        agent_registry=registry,
+    )
+    step = WorkflowStep(id="crash", kind="agent", agent_name="crashing_agent")
+    wf = _make_wf(step)
+    ex = WorkflowExecution(workflow_id=wf.id, context={})
+
+    result = asyncio.run(executor.run(wf, ex))
+
+    assert result.status == WorkflowStatus.FAILED
+    assert result.step_results["crash"].status == StepStatus.FAILED
+    assert "boom: unexpected failure" in (result.step_results["crash"].error or "")
 

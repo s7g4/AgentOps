@@ -4,14 +4,27 @@ from __future__ import annotations
 
 import asyncio
 
+from app.agents.base import RoutableAgent
 from app.agents.registry import AgentRegistry
 from app.messaging.bus import AgentBus
-from app.messaging.message import SubTask
+from app.messaging.message import AgentMessage, SubTask
 from app.messaging.supervisor import SupervisorAgent
 
 
 def _supervisor() -> SupervisorAgent:
     return SupervisorAgent(bus=AgentBus(), registry=AgentRegistry.default())
+
+
+class _CrashingAgent(RoutableAgent):
+    """Raises a plain RuntimeError — not an AgentOpsError subclass — to
+    verify _dispatch()'s except Exception actually wraps arbitrary
+    exception types, not just the domain ones exercised elsewhere."""
+
+    name = "crashing_agent"
+    description = "Always raises RuntimeError."
+
+    async def handle(self, message: AgentMessage) -> AgentMessage:
+        raise RuntimeError("boom: unexpected failure")
 
 
 # ── Single subtask ────────────────────────────────────────────────────────────
@@ -79,6 +92,24 @@ def test_all_failed_gives_failed_status() -> None:
     assert result.status == "failed"
     for r in result.results:
         assert r.status == "error"
+
+
+def test_non_agentops_error_is_caught_and_wrapped_not_raised() -> None:
+    """Regression test: every other failure test here goes through
+    AgentNotFoundError (an unknown agent name). _dispatch()'s except
+    Exception should catch ANY exception type, including a plain
+    RuntimeError raised from inside a real agent's handle() — this was
+    previously unverified."""
+    registry = AgentRegistry()
+    registry.register(_CrashingAgent())
+    sv = SupervisorAgent(bus=AgentBus(), registry=registry)
+    tasks = [SubTask(task_id="t1", agent_name="crashing_agent", payload={})]
+
+    result = asyncio.run(sv.route("goal", tasks))
+
+    assert result.status == "failed"
+    assert result.results[0].status == "error"
+    assert "boom: unexpected failure" in (result.results[0].error or "")
 
 
 # ── Metadata ──────────────────────────────────────────────────────────────────
