@@ -27,6 +27,12 @@ def test_get_trace_not_found_returns_404() -> None:
     with TestClient(app) as client:
         r = client.get("/trace/does-not-exist-at-all")
         assert r.status_code == 404
+        # Every HTTPException response gets a consistent {"error", "detail"}
+        # envelope — same shape the auth/rate-limit middleware already use —
+        # not just FastAPI's bare default {"detail": ...}.
+        body = r.json()
+        assert body["error"] == "Not Found"
+        assert "does-not-exist-at-all" in body["detail"]
 
 
 def test_list_traces_returns_paginated_results() -> None:

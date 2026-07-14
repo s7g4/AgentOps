@@ -1,7 +1,9 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from http import HTTPStatus
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from app import __version__
 from app.api.routes import router
@@ -9,6 +11,31 @@ from app.config.settings import load_settings
 from app.logging.structured_logger import configure_structlog
 from app.middleware.auth import APIKeyMiddleware
 from app.middleware.rate_limit import RateLimitConfig, RateLimitMiddleware
+
+
+async def _http_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Add an ``error`` field to every HTTPException response.
+
+    FastAPI's default handler only produces ``{"detail": ...}``; the auth and
+    rate-limit middleware already return ``{"error": ..., "detail": ...}``
+    (they build their own JSONResponse, not an HTTPException, so this handler
+    doesn't touch them). This closes the gap so every error response — 404s,
+    422s, 500s raised anywhere in app/api/endpoints/ — has the same shape,
+    additively: existing code reading response.json()["detail"] is unaffected.
+
+    Typed ``exc: Exception`` (not ``HTTPException``) because that's the
+    signature ``Starlette.add_exception_handler`` requires; narrowed inside.
+    """
+    assert isinstance(exc, HTTPException)
+    try:
+        reason = HTTPStatus(exc.status_code).phrase
+    except ValueError:
+        reason = "Error"
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": reason, "detail": exc.detail},
+        headers=exc.headers,
+    )
 
 
 @asynccontextmanager
@@ -84,6 +111,8 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
     )
+
+    app.add_exception_handler(HTTPException, _http_exception_handler)
 
     # ── Middleware (applied in reverse registration order by Starlette) ─────
     # Rate limiting wraps the outermost layer (before auth) so abusive callers

@@ -1,5 +1,15 @@
 # API Reference
 
+## Error responses
+
+Every error response — 401s and 429s from middleware, 404/422/500s raised anywhere in `app/api/endpoints/` — has the same shape:
+
+```json
+{ "error": "Not Found", "detail": "Trace 'abc123' not found" }
+```
+
+`error` is the standard HTTP reason phrase for the status code; `detail` is the specific message. Client code should read `detail` for the message and can use `error` as a stable, status-code-derived category if useful.
+
 ## `POST /messages` / `POST /messages/batch`
 
 Runs a message through the FSM pipeline. `batch` processes all messages concurrently.

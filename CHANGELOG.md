@@ -8,6 +8,7 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 - `RedisRoutingStore`'s Redis connection was never closed on shutdown — it's created via the same `get_routing_store()` the supervisor uses, but was never bound to `app.state` nor included in the shutdown-close loop in `app/api/main.py`. Now bound and closed like every other store.
 - Tool-execution retry only applied to `/messages` (the FSM pipeline); workflow tool-kind steps called `ToolRegistry.execute()` directly with no retry and no Prometheus metrics. Retry (`tenacity`) and metrics now live inside `ToolRegistry.execute()` itself, so every caller gets identical behavior.
+- Error responses were inconsistent — middleware (auth, rate limiting) returned `{"error": ..., "detail": ...}`, everything else fell through to FastAPI's default `{"detail": ...}`. A global `HTTPException` handler now gives every error response the same shape, additively (existing `detail`-only consumers are unaffected).
 
 ## [1.0.0]
 
