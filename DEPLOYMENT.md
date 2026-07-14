@@ -1,6 +1,6 @@
 # Deployment
 
-AgentOps is a stateless FastAPI process plus Redis. Any platform that runs a container and gives you a Redis instance works. This covers three paths: self-hosting via Docker Compose, and two managed platforms (Fly.io, Render) with ready-to-use config.
+AgentOps is a stateless FastAPI process plus Redis. Any platform that runs a container and gives you a Redis instance works. This covers three paths: self-hosting via Docker Compose, and two managed platforms (Fly.io, Render) with ready-to-use config. **If you want to deploy without a card on file, use Option C (Render)** — Fly.io requires payment info even for low-usage apps; Render's free plan doesn't.
 
 ## Production checklist
 
@@ -44,7 +44,7 @@ Caddy provisions and renews the certificate automatically; no manual ACME setup.
 
 ## Option B — Fly.io
 
-`fly.toml` is included. Managed Redis: either Fly's own Redis via `fly redis create`, or a free-tier external one (Upstash), either way you get a `redis://...` URL.
+Requires payment info on the account even for a low-usage app (Fly no longer has a no-card free tier) — skip to Option C if you'd rather not add one. `fly.toml` is included. Managed Redis: either Fly's own Redis via `fly redis create`, or a free-tier external one (Upstash), either way you get a `redis://...` URL.
 
 ```bash
 flyctl launch --no-deploy         # picks up fly.toml, creates the app
@@ -58,7 +58,7 @@ flyctl deploy
 
 ## Option C — Render
 
-`render.yaml` is a Blueprint — Render provisions the web service and a managed Redis instance from one file.
+`render.yaml` is a Blueprint — Render provisions the web service and a managed Redis instance from one file, both on the **free** plan (no card required to start).
 
 ```bash
 # In the Render dashboard: New -> Blueprint -> point at this repo.
@@ -66,6 +66,12 @@ flyctl deploy
 # wires REDIS_URL automatically. You'll be prompted in the dashboard for
 # the vars marked `sync: false` (API_KEYS, OPENAI_API_KEY).
 ```
+
+Free-tier tradeoffs worth knowing before you rely on it for anything but a demo:
+
+- The web service spins down after 15 minutes with no traffic and takes a cold-start hit (several seconds) on the next request — fine for a portfolio demo, not for anything latency-sensitive.
+- The free Redis (Key Value) instance is capped at 25 MB / 50 connections — plenty for demo traces and rate-limit counters, not a production cache.
+- Upgrading either later is a one-line `plan:` change in `render.yaml`, no re-architecture needed.
 
 ---
 
