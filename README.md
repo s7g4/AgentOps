@@ -12,6 +12,25 @@ A multi-agent orchestration backend built on FastAPI. Three ways to run work thr
 
 ---
 
+## Demo
+
+All three entry points, an execution trace, and Prometheus metrics — one Docker Compose stack, no external services:
+
+![Terminal walkthrough of the three entry points](docs/assets/demo-terminal.gif)
+
+Interactive API docs (Swagger UI, generated from the code, always current) and the full docs site:
+
+<table>
+<tr>
+<td width="50%"><img src="docs/assets/swagger-overview.png" alt="Swagger UI listing all endpoints"></td>
+<td width="50%"><img src="docs/assets/swagger-messages-expanded.png" alt="Swagger UI Try-it-out panel for POST /messages"></td>
+</tr>
+</table>
+
+![Docs site homepage](docs/assets/docs-site-home.png)
+
+---
+
 ## Why three entry points
 
 Most agent frameworks pick one shape and force everything through it. AgentOps keeps three, because the request shapes are genuinely different:
