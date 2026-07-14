@@ -22,8 +22,6 @@ import asyncio
 import time
 import uuid
 
-from tenacity import retry, stop_after_attempt, wait_fixed
-
 from app.agents.classifier.classifier_agent import ClassifierAgent
 from app.agents.planner.planner_agent import PlannerAgent
 from app.agents.response_generator.response_generator_agent import ResponseGeneratorAgent
@@ -39,8 +37,6 @@ from app.registry.tool_registry import ToolRegistry
 from app.runtime.metrics import (
     REQUEST_COUNT,
     REQUEST_LATENCY_SECONDS,
-    TOOL_EXECUTION_LATENCY_SECONDS,
-    TOOL_EXECUTION_TOTAL,
     VERIFIER_ESCALATIONS_TOTAL,
 )
 from app.runtime.state_machine import RuntimeState, validate_transition
@@ -114,29 +110,16 @@ class AgentOpsRuntime:
         )
         return to_state
 
-    @retry(stop=stop_after_attempt(2), wait=wait_fixed(0.2), reraise=True)
-    def _execute_tool_sync(
-        self, tool_name: str, raw_input: dict[str, object]
-    ) -> dict[str, object]:
-        """Synchronous tool execution wrapped by tenacity retry."""
-        start = time.perf_counter()
-        status = "success"
-        try:
-            return self.tool_registry.execute(tool_name, raw_input)
-        except Exception:
-            status = "error"
-            raise
-        finally:
-            TOOL_EXECUTION_TOTAL.labels(tool_name=tool_name, status=status).inc()
-            TOOL_EXECUTION_LATENCY_SECONDS.labels(tool_name=tool_name).observe(
-                time.perf_counter() - start
-            )
-
     async def _execute_tool(
         self, tool_name: str, raw_input: dict[str, object]
     ) -> dict[str, object]:
-        """Run a synchronous tool in a thread pool to avoid blocking the event loop."""
-        return await asyncio.to_thread(self._execute_tool_sync, tool_name, raw_input)
+        """Run a synchronous tool in a thread pool to avoid blocking the event loop.
+
+        Retry and tool-execution metrics live in ToolRegistry.execute() itself,
+        not here — that's the single dispatch path every caller (this pipeline,
+        workflow tool-kind steps) goes through, so both get the same behavior.
+        """
+        return await asyncio.to_thread(self.tool_registry.execute, tool_name, raw_input)
 
     # ── Core message handler ──────────────────────────────────────────────────
 

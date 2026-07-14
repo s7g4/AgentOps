@@ -42,6 +42,25 @@ class BadOutputTool(BaseTool[dict[str, Any], Any]):
         return "not a dict"
 
 
+class FlakyTool(BaseTool[dict[str, Any], dict[str, Any]]):
+    """Fails on the first call, succeeds on the second — for retry tests."""
+
+    name = "flaky"
+    description = "Fails once, then succeeds."
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def validate_input(self, raw: dict[str, Any]) -> dict[str, Any]:
+        return raw
+
+    def execute(self, parsed: dict[str, Any]) -> dict[str, Any]:
+        self.calls += 1
+        if self.calls == 1:
+            raise ToolExecutionError("transient")
+        return {"ok": True, "calls": self.calls}
+
+
 class TestToolRegistryRegistration:
     def test_register_and_list(self) -> None:
         reg = ToolRegistry()
@@ -117,3 +136,17 @@ class TestToolRegistryExecution:
         reg = ToolRegistry.default()
         with pytest.raises(ToolValidationError, match="order_id is required"):
             reg.execute("check_order_status", {})
+
+    def test_execute_retries_transient_failure(self) -> None:
+        """Regression test: retry lives in ToolRegistry.execute() itself, not
+        in the FSM runtime's old wrapper — so every caller (the FSM pipeline
+        AND workflow tool-kind steps, which both call this same method) gets
+        the same resilience instead of only the pipeline getting it."""
+        reg = ToolRegistry()
+        tool = FlakyTool()
+        reg.register(tool)
+
+        result = reg.execute("flaky", {})
+
+        assert result == {"ok": True, "calls": 2}
+        assert tool.calls == 2

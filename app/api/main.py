@@ -37,6 +37,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from app.api.deps import (  # noqa: PLC0415  # noqa: PLC0415  # noqa: PLC0415
         get_agent_registry,
         get_rate_limiter,
+        get_routing_store,
         get_runtime,
         get_supervisor,
         get_tool_registry,
@@ -51,13 +52,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.workflow_store = get_workflow_store()
     app.state.workflow_executor = get_workflow_executor()
     app.state.agent_registry = get_agent_registry()
+    app.state.routing_store = get_routing_store()
     app.state.supervisor = get_supervisor()
     app.state.rate_limiter = get_rate_limiter()
 
     yield
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
-    for state_key in ("trace_store", "workflow_store", "rate_limiter"):
+    for state_key in ("trace_store", "workflow_store", "routing_store", "rate_limiter"):
         resource = getattr(app.state, state_key, None)
         if resource is not None and hasattr(resource, "close"):
             await resource.close()

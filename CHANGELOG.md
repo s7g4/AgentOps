@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- `RedisRoutingStore`'s Redis connection was never closed on shutdown — it's created via the same `get_routing_store()` the supervisor uses, but was never bound to `app.state` nor included in the shutdown-close loop in `app/api/main.py`. Now bound and closed like every other store.
+- Tool-execution retry only applied to `/messages` (the FSM pipeline); workflow tool-kind steps called `ToolRegistry.execute()` directly with no retry and no Prometheus metrics. Retry (`tenacity`) and metrics now live inside `ToolRegistry.execute()` itself, so every caller gets identical behavior.
+
 ## [1.0.0]
 
 The three orchestration systems built in 0.x (FSM pipeline, workflow engine, agent bus) are now one substrate instead of three silos, and the gaps a production deployment would actually hit — untested Redis persistence, single-key auth, a rate limiter that only works on one replica, no client — are closed.

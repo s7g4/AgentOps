@@ -219,6 +219,8 @@ Both the auth middleware (for the `client` field on rejected-request log lines) 
 
 ## Dependency Injection
 
-Singletons are created via `functools.lru_cache` in `app/api/deps.py` — `get_runtime()`, `get_tool_registry()`, `get_trace_store()`, `get_agent_registry()`, `get_agent_bus()`, `get_supervisor()`, `get_workflow_store()`, `get_workflow_executor()`, `get_rate_limiter()`. `get_agent_registry()` registers `PipelineAgent(get_runtime())` alongside the built-in demo agents, so the DI-wired runtime singleton — not a fresh one — is what the bus reaches.
+Singletons are created via `functools.lru_cache` in `app/api/deps.py` — `get_runtime()`, `get_tool_registry()`, `get_trace_store()`, `get_agent_registry()`, `get_agent_bus()`, `get_supervisor()`, `get_workflow_store()`, `get_workflow_executor()`, `get_routing_store()`, `get_rate_limiter()`. `get_agent_registry()` registers `PipelineAgent(get_runtime())` alongside the built-in demo agents, so the DI-wired runtime singleton — not a fresh one — is what the bus reaches. Every one of these is bound to `app.state` at startup and closed (where a `close()` method exists) on shutdown — see `app/api/main.py`'s lifespan handler.
+
+Note for anyone testing against different backends within one process: these `lru_cache` singletons have no invalidation hook, so switching `TRACE_BACKEND`/`RATE_LIMIT_BACKEND` via `override_settings()` after any of these getters has already been called (e.g. by an earlier test's `create_app()`) has no effect — the cached instance from the first call persists for the life of the process. The Redis-backed store test suites (`test_redis_trace_store.py` etc.) sidestep this by constructing the Redis classes directly rather than going through `app/api/deps.py`.
 
 These are bound to `app.state` at startup for direct access in tests. `override_settings()` in `app/config/settings.py` allows test isolation.

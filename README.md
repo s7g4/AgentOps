@@ -232,7 +232,7 @@ For load testing all three entry points, see [`locustfile.py`](locustfile.py) an
 - **Structured exceptions** — `AgentOpsError` hierarchy maps error types to HTTP status codes in middleware, not in handlers.
 - **Persistence** — traces, workflow definitions/executions, and routing history each have an in-memory implementation (default) and a Redis implementation (`TRACE_BACKEND=redis`), behind the same protocol.
 - **Rate limiting** — in-memory sliding window by default; `RATE_LIMIT_BACKEND=redis` switches to a shared fixed-window counter so every replica agrees on the limit.
-- **Retry logic** — tool execution uses `tenacity` with exponential backoff. Configurable per-tool.
+- **Retry logic** — `ToolRegistry.execute()` retries once (`tenacity`, fixed 0.2s wait) on any exception, uniformly for every tool and every caller — the FSM pipeline and workflow tool-kind steps both dispatch through this same method, so neither gets weaker resilience than the other.
 
 See [docs/architecture.md](docs/architecture.md) for the full component map and request lifecycles, [docs/design-decisions.md](docs/design-decisions.md) for the reasoning behind the three-entry-point shape, [DEPLOYMENT.md](DEPLOYMENT.md) for running this somewhere other than your laptop, and [CHANGELOG.md](CHANGELOG.md) for release history. Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md); security issues go through [SECURITY.md](SECURITY.md), not a public issue.
 
