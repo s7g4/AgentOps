@@ -48,4 +48,8 @@ Each step is `"kind": "tool"` (dispatches to the tool registry) or `"kind": "age
 | `GET /tools` | Registered tool names and input schemas. |
 | `POST /evaluation` | Runs the evaluation harness on synthetic ticket data. |
 
-Interactive, always-current API docs (OpenAPI/Swagger) are served at `/docs` on a running instance.
+Interactive, always-current API docs (OpenAPI/Swagger) are served at `/docs` on a running instance:
+
+![Swagger UI listing all endpoints](assets/swagger-overview.png)
+
+![Swagger UI Try-it-out panel for POST /messages](assets/swagger-messages-expanded.png)
