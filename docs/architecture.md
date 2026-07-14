@@ -211,6 +211,8 @@ Every `/messages` request produces a structured `Trace` in `TraceStore`: state t
 
 Only `/health` and `/metrics` bypass auth (liveness probes and scrapers need to run with no credentials). `/docs`, `/redoc`, and `/openapi.json` do **not** bypass it — once auth is enabled, the API schema itself requires a key too.
 
+**All configured keys share one trust domain — there is no per-key data isolation.** `TraceStore`, `WorkflowStore`, and `RoutingStore` have no concept of "owner"; any valid key can read every trace, workflow, and routing record in the deployment. Multiple keys are for rotation and per-caller revocation, the same idea as multiple keys on one Stripe account — they aren't tenant boundaries. A deployment that needs actual per-customer isolation should run one instance per customer; treat this as a gap to plan around, not something already handled.
+
 ### Client IP and `X-Forwarded-For`
 
 Both the auth middleware (for the `client` field on rejected-request log lines) and the rate limiter (for the bucket key) need a caller IP. `X-Forwarded-For` is a client-supplied header — trusting it unconditionally lets a caller reset their own rate-limit bucket by sending a fresh spoofed value on every request. It's only honored when `Settings.trust_proxy_headers` is `true`, and even then the *last* entry is used (the hop a well-behaved reverse proxy appends), not the first (the hop a client controls). By default (`trust_proxy_headers=false`), both fall back to `request.client.host`, the actual socket peer address — correct when the app is reachable directly, which is the safe assumption absent an explicit opt-in.

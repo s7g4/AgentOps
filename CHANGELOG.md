@@ -8,6 +8,7 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 - `pip-audit` dependency-vulnerability scanning in CI, for both the root package and `client/` (each as a gating step — a real fail, not just a report).
 - A dedicated CI job for `client/`'s own lint/type-check/test suite. It previously ran locally only — 19 tests were never exercised in CI.
+- Documented two previously-unwritten limitations in `SECURITY.md`, `docs/architecture.md`, and `docs/api-reference.md`: every `API_KEYS` entry shares one trust domain with no per-key data isolation, and `POST /workflows/{id}/run` / `POST /agents/route` have no idempotency-key support (a client-side retry re-runs/re-dispatches). Neither is getting built right now — see `docs/design-decisions.md` for why.
 
 ### Fixed
 

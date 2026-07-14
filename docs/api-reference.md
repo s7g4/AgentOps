@@ -36,6 +36,8 @@ Runs a message through the FSM pipeline. `batch` processes all messages concurre
 
 Each step is `"kind": "tool"` (dispatches to the tool registry) or `"kind": "agent"` (dispatches to the agent bus). Steps in the same DAG layer run concurrently via `asyncio.gather`; a step can reference an upstream step's output with `"$step.<id>.<key>"`.
 
+**No idempotency-key support.** `POST /workflows/{id}/run` has no `Idempotency-Key` header or equivalent deduplication — if a client retries after a timeout, the workflow runs again. This matters most for non-idempotent tool steps (anything with a real side effect, not the bundled example tools). If you need retry-safety here, build it at the call site today (e.g., check `GET /workflows/{id}/runs` for an existing in-flight/completed execution before retrying) — it isn't handled server-side yet.
+
 ## Agents
 
 | Route | Description |
@@ -45,7 +47,9 @@ Each step is `"kind": "tool"` (dispatches to the tool registry) or `"kind": "age
 | `GET /agents/routes` | Paginated routing history. |
 | `GET /agents/routes/{routing_id}` | Fetch one routing run. |
 
-`RoutingResult.status` is `completed` (all subtasks succeeded), `partial` (mixed), or `failed` (all failed) — one subtask failing never cancels the others.
+`RoutingResult.status` is `completed` (all subtasks succeeded), `partial` (mixed), or `failed` (all failed) — one subtask failing never cancels the others. Same idempotency caveat as workflows above: a retried `POST /agents/route` re-dispatches every subtask.
+
+**No per-key data isolation.** Any valid API key can read every trace, workflow, and routing record in the deployment, regardless of which key created them. See `docs/architecture.md`'s Authentication section if this matters for your deployment.
 
 ## Observability & ops
 

@@ -29,3 +29,11 @@ That's the difference between three entry points and three products. A workflow 
 ## Hardening in practice
 
 A later security pass on this codebase found a real instance of the rate limiter and the auth middleware's rejection logging both keying off `X-Forwarded-For` unconditionally. That header is client-supplied, so trusting it by default meant a caller could reset their own rate-limit bucket by sending a fresh spoofed value on every request — it defeats the point of rate limiting on any deployment that isn't sitting behind a reverse proxy overwriting the header. The fix: a `trust_proxy_headers` setting, off by default, falling back to the actual socket peer address unless a deployment explicitly opts in, and even then reading the *last* hop rather than the client-controlled first one. Same instinct as the DAG-validation call above — fail toward the safe, boring default, and make the riskier behavior something you have to ask for.
+
+## Two gaps that got documented, not built
+
+Same review that caught the `X-Forwarded-For` issue also found two real gaps: any valid API key can read any other key's traces/workflows/routing history, and a retried `POST /workflows/{id}/run` re-runs the workflow (no idempotency key). Both stay unfixed for now.
+
+Per-key isolation means picking a definition of "tenant," adding an owner field to every store, and filtering every list endpoint by it. This deployment is one trust domain with a handful of credentials for rotation, not a multi-tenant SaaS — so that work has no target yet, and building it against a guess would probably mean rebuilding it later against the real requirement. Idempotency-key support means a dedup cache with its own expiry and replay semantics — real infrastructure, currently justified by zero observed retries in production because there's no production traffic yet.
+
+Both are now written down in `SECURITY.md`, `docs/architecture.md`, and `docs/api-reference.md` instead of sitting as something a caller has to find out the hard way.
